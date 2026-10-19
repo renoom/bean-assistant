@@ -1,0 +1,40 @@
+{
+  "name": "stage-channel-sdk",
+  "version": "0.1.0",
+  "description": "TypeScript/Node client SDK for the StageChannel protocol: console gateway discovery, WebSocket handshake, stage registration/activation, commands and LLM events.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "keywords": [
+    "stage-channel",
+    "websocket",
+    "assistant",
+    "sdk",
+    "typescript"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  }
+}

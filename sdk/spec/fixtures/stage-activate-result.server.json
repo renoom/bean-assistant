@@ -1,0 +1,1 @@
+{"type":"stage_activate_result","requestId":"a1","result":{"kind":"changed","stage":{"id":"town:meadow","kind":"town","revision":1,"status":"active","participants":[{"id":"assistant-1","role":"assistant","name":"编码助手","online":true}],"capabilities":[{"name":"say"}],"environment":{"text":"萤火镇"}}}}

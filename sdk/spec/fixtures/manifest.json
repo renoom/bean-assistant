@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "fixtures": [
+    {"file": "hello.client.json", "direction": "client_to_server", "type": "hello"},
+    {"file": "hello-ack.server.json", "direction": "server_to_client", "type": "hello_ack"},
+    {"file": "stage-register.client.json", "direction": "client_to_server", "type": "stage_register"},
+    {"file": "stage-register-result.server.json", "direction": "server_to_client", "type": "stage_register_result"},
+    {"file": "stage-activate.client.json", "direction": "client_to_server", "type": "stage_activate"},
+    {"file": "stage-activate-result.server.json", "direction": "server_to_client", "type": "stage_activate_result"},
+    {"file": "command.server.json", "direction": "server_to_client", "type": "command"},
+    {"file": "command-result.client.json", "direction": "client_to_server", "type": "command_result"},
+    {"file": "event.client.json", "direction": "client_to_server", "type": "event"},
+    {"file": "llm-event.server.json", "direction": "server_to_client", "type": "llm_event"},
+    {"file": "stage-transition.client.json", "direction": "client_to_server", "type": "stage_transition"},
+    {"file": "error.server.json", "direction": "server_to_client", "type": "error"}
+  ]
+}

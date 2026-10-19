@@ -42,11 +42,19 @@ coverage/
 评审文档.md
 
 # Godot 客户端本地缓存
-assistant-godot/.godot/
-assistant-godot/.import/
+examples/godot-demo/.godot/
+examples/godot-demo/.import/
 
 # 系统与编辑器
 .DS_Store
 .idea/
 .vscode/
 *.swp
+
+# SDK 构建产物
+sdk/swift/.build/
+sdk/swift/.swiftpm/
+sdk/npm/dist/
+sdk/npm/node_modules/
+sdk/godot/.godot/
+examples/godot-demo/addons/

@@ -1,0 +1,1 @@
+{"type":"llm_event","event":{"type":"assistant_message","data":{"turn":2,"step":1,"message":{"role":"assistant","content":[{"type":"text","text":"你好，我在。"}]}}}}

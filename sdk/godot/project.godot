@@ -1,0 +1,22 @@
+; Minimal Godot 4 project used to run the StageChannel SDK headless tests.
+; Test entry point:
+;   godot --headless --path sdk/godot res://tests/run_tests.tscn
+
+config_version=5
+
+[application]
+
+config/name="StageChannelSdk"
+config/description="Godot 4 StageChannel SDK (addon + headless tests)"
+run/main_scene="res://tests/run_tests.tscn"
+config/features=PackedStringArray("4.3", "GL Compatibility")
+
+[display]
+
+window/size/viewport_width=640
+window/size/viewport_height=360
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"

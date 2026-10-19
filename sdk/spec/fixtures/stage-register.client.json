@@ -1,0 +1,1 @@
+{"type":"stage_register","requestId":"r1","stage":{"id":"town:meadow","kind":"town","environment":{"text":"萤火镇"},"commands":[{"name":"say","description":"在场景中说话","parameters":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}}]}}

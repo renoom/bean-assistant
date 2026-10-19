@@ -1,0 +1,1 @@
+{"type":"stage_register_result","requestId":"r1","result":{"kind":"registered","registration":{"id":"stage:godot-1:town:meadow","stageId":"town:meadow","stageKind":"town","environment":{"text":"萤火镇"},"capabilities":[{"name":"say"}]}},"stage":{"id":"empty","kind":"empty","revision":0,"status":"empty","participants":[],"capabilities":[]}}

@@ -49,7 +49,7 @@ node --import tsx --test src/gateway.test.ts
 ```
 
 ```bash
-cd assistant-godot
+cd examples/godot-demo
 ./run.sh test
 node tests/protocol_smoke.mjs
 ```

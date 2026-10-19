@@ -6,10 +6,22 @@ Bean Assistant 的 Stage 协议目前有 **两个正式客户端**：Godot 场�
 
 | 客户端 | 位置 | 形态 | 技术栈 | 连接方式 | 自带验证 |
 | --- | --- | --- | --- | --- | --- |
-| Godot 场景客户端「萤火镇」 | [`assistant-godot/`](../assistant-godot/) | 桌面 / 游戏客户端 | Godot 4 · GDScript | Console 网关 `/a/{sessionId}/ws` | `./run.sh test` + `tests/*_smoke.mjs` |
+| Godot 场景客户端「萤火镇」 | [`examples/godot-demo/`](../examples/godot-demo/) | 桌面 / 游戏客户端 | Godot 4 · GDScript | Console 网关 `/a/{sessionId}/ws` | `./run.sh test` + `tests/*_smoke.mjs` |
 | 雷鸟 iO 眼镜客户端 | 同级独立工程 `glasses/RayNeoCustomApp` | iPhone App（BLE 驱动眼镜显示/收音） | SwiftUI · RayNeoKit · `RayneoNet.framework` | Console 网关；独立部署可手动 WS | Swift 单测 + `scripts/verify-*` |
 
 > 雷鸟 iO 眼镜客户端不在本仓库内，是同级目录的独立 Xcode 工程。App 只负责采集、显示与场景声明；模型、记忆、工具都在助手侧，因此客户端不依赖 dsh 内核。
+
+## SDK 与 demo
+
+Stage 接入层被抽成 **一套协议契约 + 三个语言 SDK**，客户端（含 demo）只消费 SDK：
+
+| 语言 | 目录 | 分发方式 | 包名 |
+| --- | --- | --- | --- |
+| GDScript（Godot 4） | [`sdk/godot/`](../sdk/godot/) | Godot addon（拷贝 `addons/stage_channel_sdk`） | `StageChannelSdk` |
+| Swift（iOS 16+ / macOS 13+） | [`sdk/swift/`](../sdk/swift/) | Swift Package | `StageChannelSdk` |
+| TypeScript / JavaScript | [`sdk/npm/`](../sdk/npm/) | npm | `stage-channel-sdk` |
+
+三端共用 [`sdk/spec/`](../sdk/spec/) 的协议契约与 `fixtures/` 一致性用例；改协议必须同步改 spec、服务端与三个 SDK。
 
 ## 统一连接契约
 
@@ -25,7 +37,8 @@ Bean Assistant 的 Stage 协议目前有 **两个正式客户端**：Godot 场�
 
 ## Godot 场景客户端
 
-- 位置：[`assistant-godot/`](../assistant-godot/)，Game 场景 + Stage 协议适配。
+- 位置：[`examples/godot-demo/`](../examples/godot-demo/)，作为 StageChannelSdk 的 Godot demo。
+- 协议实现来自 [`sdk/godot/`](../sdk/godot/) 的 `StageChannelSdk` addon；demo 只保留场景、UI 与展示装配。
 - 负责 Stage 注册与激活、Bridge 命令执行、场景事件上报、SSE 聊天输出渲染。
 - 验证：`./run.sh test`（headless 单测）+ `tests/protocol_smoke.mjs` / `ws_lifecycle_smoke.mjs` / `console_discovery_smoke.mjs`。
 

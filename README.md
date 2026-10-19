@@ -100,7 +100,9 @@ flowchart TB
 bean-assistant/
 ├── console/            # 控制台：注册中心 · 管理中心 · 配置中心 · 网关 · 调度
 ├── assistant/          # 助手进程：Cordis 插件树 + 一个 dsh Agent + 三通道服务
-├── assistant-godot/    # Godot 场景客户端「萤火镇」（Stage 协议消费者）
+├── sdk/                # StageChannelSdk：协议契约 + Godot / Swift / npm 三语言 SDK
+├── examples/
+│   └── godot-demo/     # Godot 场景客户端「萤火镇」（StageChannelSdk 的 demo）
 ├── automation/         # 自动化验证：类型检查 · 测试 · 依赖巡检 · 内核升级
 ├── docs/               # 架构、协议、配置中心、调度、记忆等设计文档
 └── README.md
@@ -130,7 +132,7 @@ cd assistant && npm run dev -- \
   --session-id <稳定会话ID> --port 3001
 ```
 
-完整启动参数、端口语义与协议细节见 [docs/development.md](docs/development.md)、[docs/architecture.md](docs/architecture.md)、[docs/protocol.md](docs/protocol.md)。
+Godot demo 在 `examples/godot-demo/`（`./run.sh demo` 离线演示，`./run.sh test` 单测）。完整启动参数、端口语义与协议细节见 [docs/development.md](docs/development.md)、[docs/architecture.md](docs/architecture.md)、[docs/protocol.md](docs/protocol.md)。
 
 ## 自动化验证
 
@@ -165,7 +167,8 @@ node automation/verify.mjs                            # 3. 回归验证
 | Agent 内核 | [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（cordis 插件框架 · agent-loop · session） |
 | 进程间协议 | HTTP · SSE · WebSocket |
 | 控制台存储 | JSON 文件 · SQLite（调度 / 会话检索） |
-| 客户端 | Godot 4（GDScript） · iOS SwiftUI / RayNeoKit（雷鸟 iO 眼镜） |
+| 客户端 SDK | `StageChannelSdk`：Godot addon · Swift Package · npm `stage-channel-sdk` |
+| 客户端 | Godot 4 demo · iOS SwiftUI / RayNeoKit（雷鸟 iO 眼镜） |
 | 测试 | Node.js 内置 test runner + tsx · 自研 automation 工具链 |
 
 ## 文档
@@ -174,6 +177,7 @@ node automation/verify.mjs                            # 3. 回归验证
 - [配置中心](docs/config-center.md) · [定时调度](docs/task-scheduler.md)
 - [长期记忆与压缩验证](docs/memory-verification.md) · [网络搜索](docs/network-search.md)
 - [开发指南](docs/development.md) · [守护进程](docs/守护进程.md)
+- [StageChannelSdk 总览](sdk/README.md) · [协议契约](sdk/spec/protocol.md)
 - [自动化验证](automation/README.md)
 
 ## 项目状态
@@ -182,7 +186,8 @@ node automation/verify.mjs                            # 3. 回归验证
 | --- | --- |
 | `console/` 控制台 | 可用 · 13 项测试 |
 | `assistant/` 助手进程 | 可用 · 49 项测试 |
-| `assistant-godot/` Godot 场景客户端 | 开发中 |
+| `sdk/` StageChannelSdk（Godot / Swift / npm） | 可用 · 215 / 48 / 40 项测试 |
+| `examples/godot-demo/` Godot 场景客户端 | demo · 81 项测试 |
 | `glasses/RayNeoCustomApp` 雷鸟 iO 眼镜客户端 | 独立工程 · Swift 单测 |
 | `automation/` 自动化验证 | 可用 · 62 项回归 |
 

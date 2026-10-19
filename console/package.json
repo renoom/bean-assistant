@@ -1,0 +1,18 @@
+{
+  "name": "@project/console",
+  "version": "0.1.0",
+  "description": "AI 助手控制台 — 注册中心 + 管理中心 + 配置中心",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx --watch src/bin.ts",
+    "build": "tsc --noEmit",
+    "start": "tsx src/bin.ts",
+    "test": "tsx --test src/gateway.test.ts src/server.test.ts src/config-search.test.ts src/scheduler.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.0"
+  }
+}

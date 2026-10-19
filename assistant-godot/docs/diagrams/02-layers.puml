@@ -1,0 +1,93 @@
+@startuml 02-layers
+' 分层视图：Godot 客户端内部的五层 + 依赖方向
+title assistant-godot/client — 分层架构
+
+skinparam componentStyle rectangle
+skinparam defaultFontName "Sans Serif"
+skinparam packageStyle rectangle
+skinparam ArrowFontSize 11
+
+package "L5  表现层  Presentation\n（Godot 场景 / 节点 / Shader）" as L5 #E8F4FF {
+  component "VNStage\n背景·立绘·特效层树" as VNStage
+  component "DialogueBox\n打字机 · 名牌 · 续行标记" as DialogueBox
+  component "InputBar\n输入 · 取消" as InputBar
+  component "BacklogPanel\n«默认隐藏»" as Backlog
+  component "ChoicePanel\n选项气泡" as Choice
+  component "StatusHud / DebugOverlay" as Hud
+}
+
+package "L4  演出层  Direction" as L4 #EAFBEF {
+  component "Director\n指令队列 · 转场 · 冲突仲裁" as Director
+  component "DialoguePlayer\n分页 · 节奏 · 等待点击" as Player
+  component "AssetCatalog\n登记 · 哈希去重 · 失效检测" as AssetLib
+  component "PathGuard + ImageLoader\n路径白名单 · 加载外部图片" as SpecRenderer
+  component "SlotMap\n命名槽位 ↔ 归一化坐标" as SlotMap
+}
+
+package "L3  领域状态层  Domain State" as L3 #FFF8E1 {
+  component "StageState + StageStore\n角色/情绪/背景/道具\n**持久化，跨重载不变**" as StageState
+  component "DialogueModel\nUtterance · Page" as DialogueModel
+  component "BacklogStore\n全量历史（内存 + 落盘）" as BacklogStore
+  component "SessionState\n连接态 · turn · 忙闲" as SessionState
+}
+
+package "L2  协议层  Protocol" as L2 #F3E8FF {
+  component "SessionClient\n握手 · 门面 API" as SessionClient
+  component "EventRouter\n原始 JSON → 类型化事件" as EventRouter
+  component "PresentationFilter\n防御性二次过滤" as Filter
+  component "StreamAssembler\ndelta 聚合 · 与终稿对账" as Assembler
+  component "TextSanitizer\nMarkdown → 台词" as Sanitizer
+  component "ToolGateway\n本地工具注册 · 调用 · 回执" as ToolGateway
+}
+
+package "L1  传输层  Transport" as L1 #FFEBEE {
+  component "ITransport\n«interface»" as ITransport
+  component "WsTransport" as Ws
+  component "HttpApi\nstatus / history" as Http
+  component "MockTransport\n录制回放（测试）" as Mock
+  component "Reconnector\n指数退避 · seq 续传" as Recon
+}
+
+package "横切  Cross-cutting" as CC #F5F5F5 {
+  component "Services\n组合根 / 依赖装配" as Services
+  component "EventBus\n全局信号" as Bus
+  component "AppConfig\nuser://config.json" as Config
+  component "Log" as Log
+}
+
+L5 -down-> L4 : 调用演出 API\n订阅信号
+L4 -down-> L3 : 读写状态
+L4 -down-> L2 : 提交工具回执
+L3 -[hidden]- L2
+L2 -down-> L1 : 收发帧
+L1 -[#999]-> L2 : 原始 JSON
+
+CC -[#bbb]-> L1
+CC -[#bbb]-> L2
+CC -[#bbb]-> L3
+CC -[#bbb]-> L4
+CC -[#bbb]-> L5
+
+note right of L2
+  **依赖倒置规则**
+  · 上层可以调用下层的接口
+  · 下层**永不**引用上层类型，
+    只通过信号 (signal) 向上发事件
+  · L1–L3 为纯 GDScript，不引用
+    任何 Node/场景 → 可在无头模式
+    下单元测试
+end note
+
+note bottom of Filter
+  「不展示工具与思考」是**两道**过滤：
+  ① vn-bridge 在源头就不发
+     （reasoning 在推理模型上可能是
+      正文的数倍，省带宽也省解析）
+  ② 客户端再防一道：不认识的帧
+     一律忽略，**绝不兜底显示**
+
+  现有 /api/stream 保持原样不动 ——
+  console 与 web-ui 仍看得到完整信息。
+end note
+
+@enduml

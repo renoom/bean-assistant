@@ -1,0 +1,110 @@
+@startuml 04-seq-chat
+' 一次普通对话的完整链路（含思考与工具在源头被丢弃）
+title 时序 ①：一次对话 —— 思考与工具在哪一步被丢掉
+
+skinparam defaultFontName "Sans Serif"
+skinparam ParticipantPadding 8
+skinparam BoxPadding 10
+
+actor 用户 as U
+box "Godot 客户端" #E8F4FF
+  participant "InputBar" as IN
+  participant "SessionClient\n+ 防御过滤" as SC
+  participant "Stream\nAssembler" as SA
+  participant "Dialogue\nPlayer" as DP
+  participant "Character\nRig" as RIG
+end box
+box "assistant 进程" #FFF8E1
+  participant "vn-bridge\nFrameCodec" as BR
+  participant "dsh Agent" as AG
+end box
+participant "LLM" as LLM
+
+U -> IN : 输入「帮我看下今天的日程」+ Enter
+IN -> SC : say(text)
+SC -> BR : WS  { type:"say", id, text }
+BR -> AG : agent.followup(userMessage)
+note right of BR
+  VN 场景提示词不在这里拼。
+  它是握手时注册的
+  systemPrompt.section('vn:scene')，
+  每一步组装时自动带上。
+end note
+AG -> LLM : chat.completions(stream)
+
+AG --> BR : turn/start
+BR --> SC : { type:"busy", phase:"thinking" }
+SC -> RIG : 切「思考」待机动作
+SC -> DP : >800ms 才显示「…」气泡\n（短回答不闪）
+
+group 模型先思考（reasoning）
+  LLM --> AG : reasoning-delta ×N
+  AG --> BR : assistant/chunk kind=reasoning-delta
+  note over BR #FFCDD2
+    **在这里丢掉,根本不上线**
+    只把「还在动」折算成 busy 心跳,
+    用于微调立绘待机强度。
+    推理内容可能是正文的数倍 ——
+    省带宽也省客户端解析。
+  end note
+end
+
+group 模型静默干活（读日程文件）
+  LLM --> AG : tool-call-request
+  AG --> BR : tool/call { name:"read_file", arguments }
+  note over BR #FFCDD2
+    工具名 / 参数 / 结果一概不转发。
+  end note
+  BR --> SC : { type:"busy", phase:"working" }
+  SC -> RIG : 切「忙碌」姿态
+  AG -> AG : 执行工具
+  AG --> BR : tool/result
+  BR --> SC : busy 续期
+  SC -> DP : >3s 才补一句「稍等」\n**永不说在忙什么**
+end
+
+group 模型说话
+  LLM --> AG : text-delta ×N
+  AG --> BR : assistant/chunk kind=text-delta
+  BR --> SC : { type:"say_delta", text:"今天" }
+  SC -> SA : push_delta("今天")
+  SA -> SA : 剥离内联表情标记 [[smile]]\n未闭合片段先扣住不上屏
+  SA --> SC : 可上屏的增量 + 表情事件
+  SC -> RIG : set_expression("smile")
+  SC -> DP : 台词增量
+  DP -> RIG : talk(true)  嘴部开合
+  DP -> DP : 打字机逐字上屏
+end
+
+AG --> BR : assistant/message（含完整终稿）
+BR --> SC : { type:"say_end", turn, text:"<终稿>" }
+note right of BR
+  **bridge 白赚的一项**：
+  现有 /api/stream 的 assistant_message
+  把 content 丢了,web-ui 只能靠累加
+  delta 还原。bridge 直接读 dsh 事件,
+  能给出终稿。
+end note
+SC -> SA : reconcile(终稿)
+note right of SA
+  以终稿为准修正流式拼接
+  （丢字 / 乱序 / 截断兜底）
+end note
+SA -> SC : Utterance
+SC -> DP : utterance_finished
+DP -> DP : TextSanitizer 去 Markdown → 分页
+DP -> RIG : talk(false)
+DP --> U : 显示第 1 页,等待点击
+
+AG --> BR : turn/end
+BR --> SC : { type:"turn_end", reason:"completed" }
+SC -> IN : 重新显示输入栏
+DP -> DP : 整段写入 BacklogStore\n（默认隐藏,L 键呼出）
+
+note over SC, BR
+  开发期想看被丢掉的东西：
+  hello.debug = true → bridge 额外推 `raw` 帧 → F3 DebugOverlay。
+  默认关闭,发布版可编译掉。
+end note
+
+@enduml

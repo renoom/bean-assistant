@@ -1,0 +1,87 @@
+@startuml 06-state-machines
+' 两台状态机：连接态 与 对话演出态
+title 状态机：连接态（上）与 对话演出态（下）
+
+skinparam defaultFontName "Sans Serif"
+skinparam state {
+  BackgroundColor<<err>> #FFCDD2
+  BackgroundColor<<ok>> #C8E6C9
+}
+
+' ========== 连接态 ==========
+state "连接态  ConnState" as Conn {
+  [*] --> Booting
+  Booting : 读 user://config.json\n**读 stage/<sessionId>.json 恢复舞台**\n探测 /api/health
+  Booting --> Discovering : 未配置端口
+  Discovering : 向 console:3000\nGET /api/assistants\n挑出 VN 实例
+  Discovering --> Connecting
+  Booting --> Connecting : 已有地址
+
+  Connecting : WS /ws\n发 hello（工具 + 舞台状态 + 资产目录 + 失效清单）
+  Connecting --> Ready <<ok>> : 收到 welcome
+  Connecting --> Offline <<err>> : 连接失败
+
+  Ready : 正常收发\n心跳 15s
+  Ready --> Degraded : WS 断开
+  Degraded : 指数退避重连\n1s→2s→4s→…→30s
+  Degraded --> Resyncing : 重连成功
+  Resyncing : GET /api/history?before=…\n补齐漏掉的 turn
+  Resyncing --> Ready
+
+  Offline : 显示「助手未启动」\n提供「拉起助手」按钮\n（走 console spawn API）
+  Offline --> Connecting : 手动重试 / 探测到上线
+}
+
+Conn -[hidden]-> Dlg
+
+' ========== 对话演出态 ==========
+state "对话演出态  DialogueState" as Dlg {
+  [*] --> Idle
+  Idle : 输入栏可见\n立绘轻微呼吸起伏（Tween，与图片无关）
+
+  Idle --> Sending : 用户回车
+  Sending --> Thinking : 服务端 accepted
+
+  Thinking : 输入栏收起\n>800ms 才显示「…」\n**思考内容不上屏**
+  Thinking --> Working : 收到 tool_call
+  Thinking --> Speaking : 收到首个 text-delta
+
+  Working : 切到 thinking 槽（未填则不变）\n**工具名/参数/结果不上屏**\n>3s 追加一句无害的等待台词
+  Working --> Speaking : 收到 text-delta
+  Working --> Working : 又一个工具
+
+  Speaking : 打字机逐字\n嘴部开合\n可空格加速
+  Speaking --> Paging : 本页排满
+  Paging : 显示 ▼ 续行标记\n等点击 / 自动前进
+  Paging --> Speaking : 下一页
+  Speaking --> Waiting : turn_end 且已排完
+
+  Waiting : 显示 ▼\n等用户点击收尾
+  Waiting --> Idle : 点击 → 台词入 Backlog
+
+  Thinking --> Choosing : ask_choice
+  Working --> Choosing : ask_choice
+  Speaking --> Choosing : ask_choice
+  Choosing : 选项气泡\n输入栏仍可用（可无视选项直接说）
+  Choosing --> Working : 已回执
+  Choosing --> Working : 超时/用户打字 → 回 null
+
+  Thinking --> Cancelled : Esc
+  Working --> Cancelled : Esc
+  Speaking --> Cancelled : Esc
+  Cancelled : POST /api/cancel\n角色演「被打断」
+  Cancelled --> Idle
+
+  Speaking --> Failed <<err>> : error 事件
+  Thinking --> Failed <<err>>
+  Failed : **以系统吐司呈现，不当作角色台词**\n（模型报错不该由角色背锅）
+  Failed --> Idle
+}
+
+note right of Dlg
+  Backlog（会话记录）在任何状态下
+  都可用 L 键 / 上滚呼出，
+  但**默认隐藏**，不占画面。
+end note
+
+@enduml

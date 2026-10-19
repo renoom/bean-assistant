@@ -1,0 +1,85 @@
+@startuml 01-deployment
+' 部署视图：assistant-godot 在整个助手平台中的位置
+title assistant-godot — 部署 / 组件视图
+
+skinparam componentStyle rectangle
+skinparam defaultFontName "Sans Serif"
+skinparam ArrowFontSize 11
+
+node "开发机 (localhost)" {
+
+  node "console 进程\n:3000" as Console {
+    component "Registry\n(assistants.json)" as Registry
+    component "ConfigCenter\n(persona / model / skills)" as ConfigCenter
+    component "Spawner\n(child_process)" as Spawner
+    component "KnowledgeCenter" as Knowledge
+  }
+
+  node "assistant 进程 (VN 专用实例)\n:3011" as Assistant {
+    component "dsh Agent\n(单 session)" as Agent
+    component "HTTP + SSE\nsrc/server.ts" as AssistantHttp
+    component "memory / knowledge tools" as BaseTools
+
+    package "vn-bridge  «新增 cordis 插件»" as Bridge {
+      component "VN WebSocket\n:3011/ws" as BridgeWs
+      component "Toolset\nvn_set_character / vn_set_scene\nvn_add_prop / vn_remove_prop / vn_ask" as StageTools
+      component "SceneContext\nsystemPrompt.section + .context" as SceneCtx
+      component "PendingCalls\ncallId → Promise 待答表" as AssetCache
+    }
+  }
+
+  node "assistant 进程 (编码助手)\n:3001" as OtherAssistant {
+    component "dsh Agent" as OtherAgent
+  }
+
+  node "assistant-godot 客户端\n(Godot 4.7 桌面应用)" as Godot {
+    component "Transport\n(WS + HTTP)" as GTransport
+    component "Protocol / Filter\n(过滤思考与工具)" as GProtocol
+    component "Director + PathGuard\n(只认图片路径)" as GDirector
+    component "VN Stage\n(背景 / 立绘 / 道具 / 对话框)" as GStage
+    component "StageStore\nuser://stage/<sessionId>.json" as GStore
+  }
+}
+
+cloud "LLM Provider\n(DeepSeek / pi-ai)" as LLM
+folder "生成的图片\n~/.assistant/vn/assets/*.png" as ImageGen
+
+' --- 连接 ---
+Godot -[#0b6]-> BridgeWs : ①  WS  用户消息 / 工具结果 / 舞台状态 / 资产目录
+BridgeWs -[#0b6]-> Godot : ②  WS  已过滤事件 / 演出工具调用
+Godot -[#888,dashed]-> AssistantHttp : ③  HTTP  /api/status, /api/history\n(断线补齐)
+Godot -[#888,dashed]-> ImageGen : ④  **本地文件读取**\nImage.load_from_file(路径)
+
+Agent <-> LLM : Chat Completions (流式)
+BridgeWs -down-> Agent : agent.followup(text)
+StageTools -up-> Agent : tool_call → 转发给客户端
+Agent ..> ImageGen : 助手用**自己的生图能力**\n把图落到磁盘
+
+Assistant -[#999]-> Registry : POST /api/register + 心跳
+Assistant -[#999]-> ConfigCenter : GET /api/config/resolve
+Spawner -[#999]-> Assistant : spawn(--persona vn ...)
+OtherAssistant -[#999]-> Registry
+
+note right of Godot
+  Godot 客户端 **只连 VN 专用 assistant 实例**。
+  编码助手 (:3001) 不受 VN 人格与
+  「回答要简洁」的约束影响。
+end note
+
+note bottom of Bridge
+  vn-bridge 必须住在 assistant 进程内，
+  因为 dsh 的工具注册 (ctx.tools.register)
+  只能在服务端进行 —— 现有 HTTP 协议
+  没有「客户端注册工具 / 回传工具结果」的入口。
+  它补上的正是这条双向通道。
+end note
+
+note bottom of ImageGen
+  **图片只经过磁盘，不走 WS。**
+  助手生成 → 落盘 → 把**路径**交给工具
+  → 客户端本地读取。
+  客户端不内置任何生成能力，
+  也不需要网络权限。（§10.1）
+end note
+
+@enduml

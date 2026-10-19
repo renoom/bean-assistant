@@ -1,0 +1,128 @@
+@startuml 09-stage-lifecycle
+' 从「只有一个对话框」到布置好舞台，以及重载后为什么还在
+title 时序 ③：舞台的一生 —— 冷启动 → 布置 → 重载恢复
+
+skinparam defaultFontName "Sans Serif"
+skinparam ParticipantPadding 8
+skinparam BoxPadding 10
+
+actor 用户 as U
+box "Godot 客户端" #E8F4FF
+  participant "Boot" as BOOT
+  participant "StageStore\n（持久化）" as ST
+  participant "ToolGateway" as TG
+  participant "PathGuard\n+ ImageLoader" as PG
+  participant "Director\n→ VNStage" as DIR
+  participant "AssetCatalog" as CAT
+end box
+box "assistant 进程" #FFF8E1
+  participant "vn-bridge" as BR
+  participant "dsh Agent" as AG
+end box
+participant "生图能力\n（助手自己的工具）" as GEN
+
+== 第一次启动：只有一个对话框 ==
+
+U -> BOOT : 启动客户端
+BOOT -> ST : 读 user://stage/<sessionId>.json
+ST --> BOOT : 不存在
+BOOT -> DIR : 空舞台
+note right of DIR #ECEFF1
+  **不自带任何占位美术。**
+  没背景 → 中性底色
+  没角色 → 不实例化立绘节点
+  画面上只有一个对话框。
+  这是**合法初始态，不是缺失态**。
+end note
+BOOT -> BR : 连 WS + 握手
+
+== 用户要形象 ==
+
+U -> AG : 「给自己弄个形象吧，穿白毛衣的那种」
+AG -> GEN : 生图（neutral / happy / sad / thinking …）
+note right of GEN
+  这一步**客户端完全不参与**。
+  几秒到几十秒，取决于助手用什么。
+end note
+GEN --> AG : 若干文件路径
+
+AG -> BR : tool_call vn_set_character\n{ id:"yui", name:"结衣",\n  sprites:{ neutral:"~/.assistant/vn/a.png",\n            happy:"…/b.png", thinking:"…/c.png" } }
+BR -> TG : stage_invoke（WS）
+TG -> PG : 逐个校验路径
+
+alt 全部通过
+  PG -> PG : 白名单根 · 扩展名 · ≤16MB · ≤4096²
+  PG -> DIR : 纹理就绪
+  DIR -> DIR : 立绘淡入（neutral 槽）
+  DIR -> CAT : 登记 3 个资产（内容哈希去重）
+  DIR -> ST : **防抖写盘 500ms**
+  DIR --> TG : { ok:true, slots_filled:3,\n  slots_empty:["sad","angry","surprised",…] }
+  note right of DIR
+    **立即回执，不等淡入放完**，
+    否则模型每次改画面多等一秒。
+  end note
+else 有路径失效
+  PG --> TG : { ok:false,\n  reason:"happy 槽文件不存在" }
+  note right of PG #FFCDD2
+    **舞台保持原样**，绝不半残上屏。
+    原因回给模型 → 它重新生成那一张。
+  end note
+end
+TG -> BR : stage_result
+BR --> AG : 工具结果
+AG -> AG : 空槽清单进下一步的\nsystemPrompt.context
+
+== 之后每句台词：情绪切换零成本 ==
+
+AG --> TG : say_delta「那我先看看 [[thinking]]」
+TG -> DIR : 切到 thinking 槽
+DIR -> ST : 写盘（当前情绪也存）
+note right of DIR #C8E6C9
+  已注册的贴图直接换，
+  **0 token、0 延迟、可在句子中间变脸**。
+  §9.3：高频操作绝不走工具。
+end note
+
+AG --> TG : say_delta「…找到了 [[angry]]」
+TG -> DIR : angry 槽为空
+DIR -> DIR : **回落 neutral**
+DIR -> CAT : 记一条 warning
+note right of DIR
+  下一步的 context 会告诉模型
+  「angry 还没生成」。
+end note
+
+== 关掉重开：舞台还在 ==
+
+U -> BOOT : 重启客户端
+BOOT -> ST : 读 user://stage/<sessionId>.json
+ST --> BOOT : { character, 当前情绪, background, props[] }
+BOOT -> PG : 逐个校验图片路径是否还在
+
+alt 路径都还在
+  BOOT -> DIR : **原样恢复**（含上次的情绪）
+  note right of DIR #C8E6C9
+    这就是「即使重新加载也不会变」。
+    **先恢复舞台，再连助手** ——
+    顺序反了会闪一下空画面。
+  end note
+else 有图没了（临时目录被清 / 用户删了）
+  BOOT -> DIR : 失效的背景 → 中性底色\n失效的道具 → 移除\n失效的情绪槽 → 回落 neutral
+  BOOT -> BR : 握手时带上**失效清单**
+  BR -> AG : 进 systemPrompt.context
+  note right of AG #FFF3E0
+    模型于是知道「那张雨天背景没了」，
+    会主动重新生成。
+    没有这条，用户会一直看着空舞台
+    而模型以为一切正常。
+  end note
+end
+
+note over TG, DIR
+  **舞台是粘性的**：不在 turn 结束时重置、
+  不做自动表情、不随机换背景。
+  客户端在演出上是纯执行者，零自主性 ——
+  只有 AI 再调一次工具才会变。（§9.6）
+end note
+
+@enduml

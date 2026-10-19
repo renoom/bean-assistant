@@ -1,0 +1,52 @@
+# 运行时数据与本地环境（不入库）
+node_modules/
+**/node_modules/
+assistant/lib/
+*.tsbuildinfo
+.pnpm-store/
+.cache/
+
+# 运行时数据：日志、pid、本机会话等（含本机路径，勿公开）
+data/
+*.log
+*.pid
+.env
+.env.*
+.assistant/
+
+# 凭据与私钥文件：即使误放入工作区也不入库
+*.pem
+*.key
+*.p12
+*.pfx
+*.cer
+*.crt
+*.mobileprovision
+*.provisionprofile
+*.keystore
+*.jks
+.netrc
+.npmrc
+.pypirc
+*.sqlite
+*.sqlite3
+*.db
+*.ipa
+
+# 测试与渲染产物
+assistant/test-output/
+automation/.cache/
+coverage/
+
+# 内部评审记录：包含安全审查与待修问题清单，暂不公开
+评审文档.md
+
+# Godot 客户端本地缓存
+assistant-godot/.godot/
+assistant-godot/.import/
+
+# 系统与编辑器
+.DS_Store
+.idea/
+.vscode/
+*.swp

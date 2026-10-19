@@ -1,0 +1,225 @@
+@startuml 03-classes
+' 核心类图：只画 L1–L4 的骨架，省略 getter/setter
+title assistant-godot/client — 核心类图
+
+skinparam defaultFontName "Sans Serif"
+skinparam classAttributeIconSize 0
+hide empty members
+
+package transport {
+  interface ITransport {
+    + connect(url, hello: Dictionary)
+    + send(frame: Dictionary)
+    + close()
+    --
+    << signal >> frame_received(Dictionary)
+    << signal >> state_changed(ConnState)
+  }
+  class WsTransport implements ITransport
+  class MockTransport implements ITransport {
+    + load_fixture(path)
+    ' 回放 tests/fixtures/*.jsonl
+  }
+  class HttpApi {
+    + get_status() : Dictionary
+    + get_history(before, limit) : Array
+  }
+  class Reconnector {
+    - backoff_ms : int
+    + note_failure()
+    + note_success()
+  }
+}
+
+package protocol {
+  class SessionClient {
+    - transport : ITransport
+    + open(cfg: AppConfig)
+    + say(text: String)
+    + cancel()
+    + respond_tool(call_id, ok, payload)
+    --
+    << signal >> utterance_started()
+    << signal >> utterance_delta(text)
+    << signal >> utterance_finished(Utterance)
+    << signal >> stage_command(StageCommand)
+    << signal >> tool_invoked(ToolInvocation)
+    << signal >> busy_changed(bool)
+    << signal >> failed(message)
+  }
+  class EventRouter {
+    + route(raw: Dictionary) : VnEvent
+  }
+  class PresentationFilter {
+    + verdict(e: VnEvent) : Verdict
+    ' SPEAK / DISCARD / BUSY / STAGE / SYSTEM
+  }
+  class StreamAssembler {
+    - buffer : String
+    + push_delta(text)
+    + reconcile(final_text) : Utterance
+  }
+  class TextSanitizer {
+    + to_script(md: String) : Array[String]
+  }
+  class ToolGateway {
+    - handlers : Dictionary
+    + declare() : Array   ' hello 时上报的 schema
+    + dispatch(inv: ToolInvocation)
+  }
+}
+
+package domain {
+  class Utterance {
+    + text : String
+    + pages : Array[String]
+    + turn : int
+    + at : int
+  }
+  class StageState {
+    + background_path : String
+    + character : CharacterState
+    + props : Dictionary   ' id -> PropState
+    + to_save() : Dictionary
+    + from_save(Dictionary)
+  }
+  class StageStore {
+    + path_for(session_id) : String
+    + save(s: StageState)   ' 防抖 500ms
+    + load(session_id) : StageState
+  }
+  class CharacterState {
+    + id : String
+    + name : String
+    + sprites : Dictionary  ' emotion -> path
+    + emotion : String      ' 当前情绪，也持久化
+    + anchor : String
+    + scale : float
+  }
+  class PropState {
+    + id : String
+    + image_path : String
+    + slot : String
+    + pos : Vector2      ' 归一化 0..1
+    + scale : float
+    + layer : String     ' behind / front character
+  }
+  class BacklogStore {
+    + append(u: Utterance)
+    + page(offset, count) : Array
+  }
+  class SessionState {
+    + conn : ConnState
+    + busy : bool
+    + turn : int
+  }
+}
+
+package direction {
+  class Director {
+    - queue : Array[StageCommand]
+    + submit(cmd: StageCommand) : Result
+    + flush()
+    - arbitrate(cmd)   ' 同层指令合并 / 抢占
+  }
+  class StageCommand {
+    + kind : String
+    + args : Dictionary
+    + transition : String
+    + duration_ms : int
+    + await_complete : bool
+  }
+  class AssetCatalog {
+    - entries : Dictionary  ' hash -> Entry
+    + register(path, kind, desc) : Entry
+    + summarize() : Array    ' 喂回模型的目录摘要
+    + verify_all() : Array   ' 返回失效清单
+  }
+  class PathGuard {
+    - allowed_roots : Array[String]
+    + check(path: String) : Result
+    ' 白名单根 / 扩展名 / ≤16MB / ≤4096²
+  }
+  class ImageLoader {
+    + load(path: String) : Texture2D
+    ' load_from_file；.svg 走 load_svg_from_string
+    - cache : Dictionary  ' hash -> Texture2D
+  }
+  class SlotMap {
+    + resolve(slot: String) : Vector2
+    + avoid_overlap(slot, taken) : Vector2
+  }
+  class DialoguePlayer {
+    + play(u: Utterance)
+    + advance()
+    + skip()
+  }
+}
+
+package presentation {
+  class VNStage <<Node2D>>
+  class BackgroundLayer <<Node2D>>
+  class PropLayer <<Node2D>> {
+    + add(p: PropState, tex)
+    + remove(id)
+    + clear()
+  }
+  class CharacterRig <<Node2D>> {
+    + set_emotion(name, tex, blend_ms)
+    + talk(on: bool)
+    ' 整张情绪立绘，不做分层部件
+  }
+  class DialogueBox <<Control>>
+  class BacklogPanel <<Control>>
+  class ChoicePanel <<Control>>
+}
+
+' --- 关系 ---
+SessionClient *-- EventRouter
+SessionClient *-- PresentationFilter
+SessionClient *-- StreamAssembler
+SessionClient *-- TextSanitizer
+SessionClient *-- ToolGateway
+SessionClient o-- ITransport
+SessionClient ..> Utterance : 产出
+SessionClient o-- SessionState
+
+ToolGateway ..> Director : vn_* 指令
+ToolGateway ..> ChoicePanel : vn_ask
+ToolGateway o-- AssetCatalog : hello 时上报摘要
+
+Director o-- StageState
+Director o-- StageStore : 施加成功后写盘
+Director o-- AssetCatalog
+Director o-- PathGuard
+Director o-- ImageLoader
+Director o-- SlotMap
+Director ..> VNStage : 施加
+StageState *-- CharacterState
+StageState *-- PropState
+
+PathGuard ..> ImageLoader : 通过后才加载
+ImageLoader ..> CharacterRig : 情绪立绘
+ImageLoader ..> BackgroundLayer : 背景
+ImageLoader ..> PropLayer : 道具
+
+DialoguePlayer o-- BacklogStore
+DialoguePlayer ..> DialogueBox
+DialoguePlayer ..> CharacterRig : talk()
+
+VNStage *-- BackgroundLayer
+VNStage *-- PropLayer
+VNStage *-- CharacterRig
+
+WsTransport o-- Reconnector
+Reconnector ..> HttpApi : 断线后 /api/history 补齐
+
+note as N1
+  **冷启动**：StageStore 没有存档 →
+  BackgroundLayer 空（中性底色）、
+  CharacterRig 不实例化、PropLayer 空。
+  画面上只有 DialogueBox。
+end note
+N1 . StageStore
+
+@enduml

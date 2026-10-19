@@ -1,0 +1,44 @@
+# AI 助手补丁层 — 覆盖 dsh-base 默认配置 + 插入 assistant 插件
+# 加载顺序: dsh-base bundle → 本文件
+#
+# 无兜底原则：persona / provider / model / apiKey 等一切配置都只来自配置中心
+# （launcher 经 spawn 参数 + HTTP 拉取注入），此处不再硬编码任何 fallback 默认值。
+
+# ── 禁用开发期不需要的 ────────────────────────────────────────────────────
+- id: hmr
+  disabled: true
+
+- id: session-telemetry-otel
+  disabled: true
+
+# 原生联网工具：搜索沿用 dsh 的 DeepSeek provider，网页读取使用 HTTP provider。
+- id: tool-web
+  config:
+    search: true
+    fetch: true
+    searchTimeoutMs: 60000
+
+# ── 纯内存 settings 后端 ───────────────────────────────────────────────────
+# 禁用 dsh-settings-file（文件后端），改用内存实例：配置的唯一持久副本在
+# 控制台，助手只持有 seam 实例，内容经 HTTP（启动拉取 / 变更 push）注入。
+- id: settings
+  disabled: true
+
+# ── 插入 assistant 插件 ───────────────────────────────────────────────────
+# sessionId / port / host / name / dataDir 由 launcher 的 CLI overlay 注入
+- insert:
+    - id: web-fetch-http
+      name: '@deepseek-ai/dsh-web-fetch-http'
+    - id: assistant-settings-provider
+      name: './src/config/settings-provider.ts'
+    - id: session-stats
+      name: '@deepseek-ai/dsh-session-stats'
+    - id: assistant
+      name: './src/plugin.ts'
+      config:
+        port: 3001
+        host: '127.0.0.1'
+        name: 'AI 助手'
+    - id: assistant-config
+      name: './src/config/plugin.ts'
+      inject: [assistant, credentials, skills, settings]

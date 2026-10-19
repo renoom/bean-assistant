@@ -1,0 +1,1108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 助手</title>
+  <style>
+    :root {
+      --bg: #fafafa;
+      --msg-user-bg: #007aff;
+      --msg-user-color: #fff;
+      --msg-assistant-bg: #f0f0f0;
+      --msg-tool-bg: #fff8e1;
+      --border: #e0e0e0;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex; flex-direction: column; height: 100vh;
+      background: var(--bg);
+    }
+    /* header */
+    #header {
+      padding: 10px 16px; border-bottom: 1px solid var(--border);
+      background: #fff; display: flex; align-items: center; gap: 8px;
+    }
+    #header h1 { font-size: 16px; font-weight: 600; }
+    #status-dot { width: 8px; height: 8px; border-radius: 50%; background: #ccc; }
+    #status-dot.connected { background: #34c759; }
+    #status-dot.running { background: #ff9500; animation: pulse 1s infinite; }
+    @keyframes pulse { 50% { opacity: 0.4; } }
+    #status-text { font-size: 12px; color: #888; }
+
+    /* messages */
+    #chat { flex: 1; overflow-y: auto; padding: 16px; }
+    .turn { margin-bottom: 16px; }
+    .msg {
+      margin-bottom: 6px; padding: 8px 14px; border-radius: 12px;
+      max-width: 85%; word-wrap: break-word; white-space: pre-wrap;
+      line-height: 1.5; font-size: 14px;
+    }
+    .msg[data-time]::before {
+      content: attr(data-time);
+      display: block; font-size: 10px; color: #8a8a8a; margin-bottom: 2px;
+    }
+    .msg.user { background: var(--msg-user-bg); color: var(--msg-user-color); margin-left: auto; }
+    .msg.user-event {
+      background: #34c759; color: #fff; margin-left: auto;
+      font-size: 13px; opacity: 0.95;
+    }
+    .msg.system-event {
+      max-width: 100%; background: #fff7e8; color: #6d4c16;
+      border-left: 3px solid #e6a23c; font-size: 13px;
+    }
+    .msg.system-event .system-event-title { font-weight: 600; }
+    .msg.system-event .system-event-meta { margin-top: 5px; font-size: 12px; line-height: 1.55; }
+    .msg.system-event details { margin-top: 7px; color: #5d4b2d; }
+    .msg.system-event pre { margin-top: 5px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .msg.assistant { background: var(--msg-assistant-bg); }
+    .msg.assistant-stage {
+      background: #ede7f6; color: #4527a0; border-left: 3px solid #7e57c2;
+    }
+    .msg.tool {
+      background: var(--msg-tool-bg); font-size: 12px; padding: 5px 10px;
+      margin-left: 20px; border-left: 3px solid #ffc107;
+    }
+    .msg.tool.done { border-left-color: #34c759; }
+    .msg.tool.error { border-left-color: #ff3b30; }
+    details.raw-event {
+      max-width: 100%; margin: 8px 0 3px; padding: 6px 9px; border-radius: 6px;
+      background: #eef1f5; color: #4b5563; font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    details.raw-event > summary { cursor: pointer; user-select: text; }
+    details.raw-event > pre { margin-top: 5px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    details.semantic-event {
+      max-width: 100%; margin: 6px 0; padding: 8px 11px; border: 1px solid #dce3ec;
+      border-radius: 9px; background: #fff; color: #344054; font-size: 12px;
+    }
+    details.semantic-event > summary { cursor: pointer; font-weight: 600; }
+    details.semantic-event > pre { margin-top: 8px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .msg.context-input { max-width: 100%; background: #eef4ff; border-left: 3px solid #6b9cff; color: #243b63; }
+    .msg.image-input { padding: 8px; background: #e9f2ff; }
+    .msg.image-input img { display: block; max-width: min(420px, 100%); max-height: 360px; border-radius: 8px; object-fit: contain; }
+    .msg.image-input .image-meta { margin-top: 5px; color: #456; font-size: 11px; }
+    /* reasoning: 默认折叠的 details/summary, 点开看思考 */
+    .msg.reasoning {
+      color: #888; font-size: 13px;
+      background: transparent; margin-bottom: 6px;
+    }
+    .msg.reasoning > summary {
+      cursor: pointer; padding: 4px 14px; list-style: none;
+      user-select: none; font-style: italic;
+    }
+    .msg.reasoning > summary::-webkit-details-marker { display: none; }
+    .msg.reasoning > summary::before {
+      content: '▸'; display: inline-block; margin-right: 6px;
+      transition: transform 0.15s;
+    }
+    .msg.reasoning[open] > summary::before { transform: rotate(90deg); }
+    .msg.reasoning > .reasoning-content {
+      padding: 4px 14px 8px 28px; white-space: pre-wrap; font-style: normal;
+    }
+    .turn-sep { border: none; border-top: 1px dashed #e0e0e0; margin: 10px 0; }
+
+    /* input */
+    #composer {
+      padding: 12px 16px; border-top: 1px solid var(--border);
+      background: #fff; display: flex; gap: 8px;
+    }
+    #attachment-preview {
+      display: none; gap: 8px; padding: 8px 16px 0; background: #fff; overflow-x: auto;
+    }
+    .pending-image { position: relative; flex: 0 0 auto; width: 76px; }
+    .pending-image img { width: 76px; height: 76px; object-fit: cover; border: 1px solid var(--border); border-radius: 8px; }
+    .pending-image button { position: absolute; right: -5px; top: -5px; width: 20px; height: 20px; padding: 0; border: none; border-radius: 50%; background: #333; color: #fff; cursor: pointer; }
+    .pending-image span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; color: #666; }
+    #input {
+      flex: 1; padding: 10px 14px; border: 1px solid #ccc;
+      border-radius: 10px; font-size: 14px; outline: none;
+    }
+    #input:focus { border-color: #007aff; }
+    #send {
+      padding: 10px 22px; background: #007aff; color: white;
+      border: none; border-radius: 10px; font-size: 14px; font-weight: 500;
+      cursor: pointer;
+    }
+    #send:hover { opacity: 0.9; }
+    #send:disabled { opacity: 0.4; }
+    #attach {
+      padding: 10px 14px; background: #f0f2f5; color: #333;
+      border: 1px solid #d5d8dc; border-radius: 10px; cursor: pointer;
+    }
+
+    /* observability panel */
+    #obs-panel {
+      padding: 6px 16px; border-bottom: 1px solid var(--border);
+      background: #f7f7f7; font-size: 12px; color: #555;
+      line-height: 1.7; font-variant-numeric: tabular-nums;
+    }
+    #obs-line1 { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    #obs-line2 { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: #777; }
+    .obs-sep { color: #d0d0d0; }
+    #ctx-bar-wrap { display: flex; align-items: center; gap: 6px; }
+    #ctx-bar {
+      width: 90px; height: 6px; border-radius: 3px; background: #e0e0e0; overflow: hidden;
+    }
+    #ctx-bar-fill { height: 100%; background: #34c759; width: 0%; transition: width 0.4s; }
+    #ctx-bar-fill.warn { background: #ff9500; }
+    #ctx-bar-fill.danger { background: #ff3b30; }
+  </style>
+</head>
+<body>
+
+<div id="header">
+  <h1>🤖 AI 助手</h1>
+  <div id="status-dot"></div>
+  <span id="status-text">连接中...</span>
+</div>
+
+<div id="obs-panel">
+  <div id="obs-line1">
+    <span id="obs-turn">0 轮 · 0 步</span><span class="obs-sep">|</span>
+    <span id="obs-time">LLM 0s · 工具 0s</span><span class="obs-sep">|</span>
+    <span id="obs-speed">首 token - · 0 tok/s</span><span class="obs-sep">|</span>
+    <span id="obs-cache">缓存命中 0%</span><span class="obs-sep">|</span>
+    <span id="obs-io">输入 0 · 输出 0</span>
+  </div>
+  <div id="obs-line2">
+    <span id="ctx-bar-wrap">
+      上下文 <span id="ctx-bar"><span id="ctx-bar-fill"></span></span>
+      <span id="obs-ctx">0%</span>
+    </span>
+    <span class="obs-sep">·</span>
+    <span id="obs-breakdown">系统 ~0 · 工具 ~0 · 对话 ~0</span>
+    <span class="obs-sep">·</span>
+    <span id="obs-memory">记忆压缩状态待读取</span>
+  </div>
+</div>
+
+<div id="chat"></div>
+
+<div id="attachment-preview"></div>
+<div id="composer">
+  <input id="image-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
+  <button id="attach" type="button" title="发送图片到当前助手会话">＋ 图片</button>
+  <input id="input" type="text" placeholder="输入消息或选择图片，Enter 发送...">
+  <button id="send">发送</button>
+</div>
+
+<script>
+// ── DOM refs ────────────────────────────────────────────────────────────────
+const $chat = document.getElementById('chat')
+const $input = document.getElementById('input')
+const $send = document.getElementById('send')
+const $attach = document.getElementById('attach')
+const $imageInput = document.getElementById('image-input')
+const $attachmentPreview = document.getElementById('attachment-preview')
+const $dot = document.getElementById('status-dot')
+const $statusText = document.getElementById('status-text')
+
+// ── 状态 ────────────────────────────────────────────────────────────────────
+let currentTurn = null       // 当前正在渲染的 .turn div
+let turnParent = $chat       // currentTurn 的父容器, 默认 chat, 反向 prepend 时是 DocumentFragment
+let currentAssistantMsg = null  // 当前正在渲染的 .assistant div
+let currentToolMsg = null   // 当前正在渲染的 .tool div
+let pendingReasoning = ''   // 累积的 reasoning-delta 文本
+let currentRawGroup = null
+let currentRawEvents = []
+let currentRawCounts = {}
+let pendingImageFiles = []
+
+// ── API Key 鉴权 ─────────────────────────────────────────────────────────────
+function readInitialApiKey() {
+  const hash = location.hash.startsWith('#') ? location.hash.slice(1) : ''
+  const fromHash = new URLSearchParams(hash).get('api_key')
+  if (fromHash) {
+    localStorage.setItem('assistant-webui-api-key', fromHash)
+    history.replaceState(null, '', location.pathname + location.search)
+    return fromHash
+  }
+  return localStorage.getItem('assistant-webui-api-key') || ''
+}
+
+let apiKey = readInitialApiKey()
+let authPrompting = false
+
+// 通过 Console 网关访问时，页面路径形如 /a/{sessionId}/；
+// 所有绝对 /api/... 请求都要自动加上这段前缀。
+const API_BASE = (() => {
+  const matched = location.pathname.match(/^\/a\/[^/]+/)
+  return matched ? matched[0] : ''
+})()
+
+let httpInteractionBase = ''
+let httpChannelEnabled = true
+
+async function loadInteractionEndpoint() {
+  const response = await apiFetch('/api/status')
+  if (!response.ok) throw new Error(`读取助手状态失败: HTTP ${response.status}`)
+  const status = await response.json()
+  // Older assistants may not advertise independent listeners yet.
+  if (!Array.isArray(status.channelEndpoints)) return
+  const endpoint = status.channelEndpoints.find(item => item.id === 'http' && item.protocol === 'http')
+  httpChannelEnabled = Boolean(endpoint)
+  $input.disabled = $send.disabled = $attach.disabled = !httpChannelEnabled
+  if (!endpoint) {
+    setStatus('', 'HTTP Channel 未启用，可查看历史记录')
+    return
+  }
+  // The Console gateway routes Channels itself; a direct page discovers its chat listener.
+  if (!API_BASE) {
+    const target = new URL(location.origin)
+    target.port = String(endpoint.port)
+    httpInteractionBase = target.origin
+  }
+}
+
+function withAuth(path) {
+  const interaction = /^\/api\/(message|stream)(?:\?|$)/.test(path)
+  const base = interaction && !API_BASE ? httpInteractionBase : API_BASE
+  const url = path.startsWith('/') ? base + path : path
+  if (apiKey.length === 0) return url
+  const sep = url.includes('?') ? '&' : '?'
+  return url + sep + 'api_key=' + encodeURIComponent(apiKey)
+}
+
+function authHeaders() {
+  return apiKey.length > 0 ? { Authorization: `Bearer ${apiKey}` } : {}
+}
+
+function requestApiKey() {
+  if (authPrompting) return
+  authPrompting = true
+
+  // 被 Console 以 iframe 嵌入时不要弹浏览器 prompt；由 Console 负责同步 Key 或刷新。
+  if (window.self !== window.top) {
+    authPrompting = false
+    setStatus('', 'API Key 失效，请在 Console 中刷新或重新选择助手')
+    return
+  }
+
+  const value = window.prompt('请输入 API Key（可在 Console 中生成）', apiKey)
+  authPrompting = false
+  if (typeof value === 'string' && value.trim().length > 0) {
+    apiKey = value.trim()
+    localStorage.setItem('assistant-webui-api-key', apiKey)
+    location.reload()
+  }
+}
+
+async function apiFetch(url, options = {}) {
+  const res = await fetch(withAuth(url), {
+    ...options,
+    headers: { ...(options.headers || {}), ...authHeaders() },
+  })
+  if (res.status === 401) {
+    requestApiKey()
+    throw new Error('unauthorized')
+  }
+  return res
+}
+
+// ── 辅助函数 ────────────────────────────────────────────────────────────────
+function formatTime(ms) {
+  const d = new Date(ms)
+  const p = (n) => String(n).padStart(2, '0')
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
+
+/** 把 Godot 场景事件（原始 JSON 字符串）转成可读的一行文案。解析失败则原样返回。 */
+function formatSceneEvent(text) {
+  let ev = null
+  try { ev = JSON.parse(text) } catch { return text }
+  if (!ev || typeof ev !== 'object') return text
+  const kind = ev.kind || ''
+  switch (kind) {
+    case 'user_said':
+      return `🗣️ 玩家说：${ev.text ?? ''}`
+    case 'assistant_said':
+      return `📢 ${ev.from ?? '助手'} 说：${ev.text ?? ''}`
+    case 'object_clicked':
+      return `🖱️ 玩家点击了「${ev.objectId ?? '?'}」${ev.description ? ' — ' + ev.description : ''}`
+    case 'object_dragged':
+    case 'object_moved':
+      return `🖱️ 玩家移动了「${ev.objectId ?? '?'}」`
+    case 'object_interacted':
+      return `🖱️ 玩家对「${ev.objectId ?? '?'}」${ev.action ? '· ' + ev.action : ''}${ev.description ? ' — ' + ev.description : ''}`
+    case 'assistant_dragged':
+      return `🖱️ 玩家移动了助手「${ev.assistantId ?? '?'}」`
+    default:
+      return `🎮 场景事件 · ${kind || '未知'}`
+  }
+}
+
+/** 把 stage_action 中真正“说出口”的内容显示成助手对话，而不只是一张工具卡。 */
+function toolArgsObject(args) {
+  if (args && typeof args === 'object') return args
+  if (typeof args !== 'string') return {}
+  try {
+    const parsed = JSON.parse(args)
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+function formatStageSpeech(name, args) {
+  const input = toolArgsObject(args)
+  if (name !== 'stage_action' || input.action !== 'execute') return null
+  const command = input.command
+  const actionArgs = input.args && typeof input.args === 'object' ? input.args : {}
+  const text = typeof actionArgs.text === 'string' ? actionArgs.text.trim() : ''
+  if (!text || (command !== 'say' && command !== 'say_to')) return null
+  if (command === 'say_to') return `🎭 对 ${actionArgs.target || '玩家'}：${text}`
+  return `🎭 ${text}`
+}
+
+function systemEventValue(source, key) {
+  if (source?.[key] !== undefined && source?.[key] !== null) return source[key]
+  return source?.task?.[key]
+}
+
+function formatSystemTime(value) {
+  if (!value) return '未提供'
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString()
+}
+
+function formatScheduledTrigger(trigger) {
+  return ({ scheduled: '自动到期', manual: '手动唤醒' })[trigger] || String(trigger || '未提供')
+}
+
+function addSystemEvent(data, time = Date.now()) {
+  ensureTurn()
+  const source = data?.source || {}
+  const isScheduledTask = source.eventType === 'scheduled-task-triggered' || source.kind === 'scheduled-task'
+  if (!isScheduledTask) {
+    const card = addMsg('system-event', `系统事件 · ${source.eventType || '未知事件'}`, time)
+    addDetail('查看完整事件内容', { text: data?.text, content: data?.content, source, turn: data?.turn, eventType: data?.eventType })
+    return card
+  }
+  const title = systemEventValue(source, 'title') || '未命名任务'
+  const taskId = systemEventValue(source, 'taskId') || source.task?.id || '未提供'
+  const runId = systemEventValue(source, 'runId') || source.run?.id || '未提供'
+  const scheduledAt = systemEventValue(source, 'scheduledAt') || source.run?.scheduledAt
+  const trigger = source.run?.trigger || source.trigger || '未提供'
+  const triggeredAt = source.run?.triggeredAt
+  const creatorName = source.task?.creatorName || '未提供'
+  const ownerSessionId = source.task?.ownerSessionId || source.sessionId || '未提供'
+  const prompt = source.task?.prompt || source.prompt || '未提供'
+  const originalContent = plainText(data?.content) || data?.text || ''
+  const card = document.createElement('div')
+  card.className = 'msg system-event'
+  card.dataset.time = formatTime(time)
+  const heading = document.createElement('div')
+  heading.className = 'system-event-title'
+  heading.textContent = `系统事件 · 定时任务触发 · ${title}`
+  const meta = document.createElement('div')
+  meta.className = 'system-event-meta'
+  meta.textContent = `任务名：${title}\n创建人：${creatorName} · ${ownerSessionId}\n任务 ID：${taskId}\n运行 ID：${runId}\n计划时间：${formatSystemTime(scheduledAt)}\n触发时间：${formatSystemTime(triggeredAt)}\n触发方式：${formatScheduledTrigger(trigger)}\nPrompt：${prompt}${originalContent && prompt === '未提供' ? `\n原始模型内容：${originalContent}` : ''}`
+  const details = document.createElement('details')
+  const summary = document.createElement('summary')
+  summary.textContent = '查看完整事件内容'
+  const body = document.createElement('pre')
+  body.textContent = pretty({ text: data?.text, content: data?.content, source, turn: data?.turn, eventType: data?.eventType })
+  details.append(summary, body)
+  card.append(heading, meta, details)
+  appendReadable(card)
+  return card
+}
+
+function addMsg(cls, text, time = Date.now()) {
+  const el = document.createElement('div')
+  el.className = 'msg ' + cls
+  if (text) el.textContent = text
+  el.dataset.time = formatTime(time)
+  appendReadable(el)
+  return el
+}
+
+function appendReadable(el) {
+  const parent = currentTurn || turnParent || $chat
+  if (currentTurn && currentRawGroup?.parentNode === currentTurn) currentTurn.insertBefore(el, currentRawGroup)
+  else parent.appendChild(el)
+}
+
+function addDetail(title, value, cls = 'semantic-event') {
+  ensureTurn()
+  const details = document.createElement('details')
+  details.className = cls
+  const summary = document.createElement('summary')
+  summary.textContent = title
+  const body = document.createElement('pre')
+  body.textContent = typeof value === 'string' ? value : pretty(value)
+  details.append(summary, body)
+  appendReadable(details)
+  return details
+}
+
+function pretty(value) {
+  if (typeof value === 'string') {
+    try { return JSON.stringify(JSON.parse(value), null, 2) } catch { return value }
+  }
+  try { return JSON.stringify(value ?? null, null, 2) } catch { return String(value) }
+}
+
+function contentText(content) {
+  if (!Array.isArray(content)) return ''
+  return content.flatMap(block => {
+    if (block?.type === 'text' || block?.type === 'reasoning') return [block.text || '']
+    if (block?.type === 'tool-result') return [contentText(block.content)]
+    if (block?.type === 'image') return ['[图片]']
+    return []
+  }).filter(Boolean).join('\n')
+}
+
+function plainText(content) {
+  if (!Array.isArray(content)) return ''
+  return content.filter(block => block?.type === 'text').map(block => block.text || '').join('\n')
+}
+
+function addInputImages(content, time = Date.now()) {
+  if (!Array.isArray(content)) return
+  for (const block of content) {
+    if (block?.type !== 'image' || !block.attachment?.attachmentId) continue
+    const card = document.createElement('div')
+    card.className = 'msg image-input'
+    card.dataset.time = formatTime(time)
+    const img = document.createElement('img')
+    img.src = withAuth(`/api/attachment/${encodeURIComponent(block.attachment.attachmentId)}`)
+    img.alt = block.attachment.name || '用户图片'
+    const meta = document.createElement('div')
+    meta.className = 'image-meta'
+    meta.textContent = `${block.attachment.name || '图片'} · ${block.attachment.width || '?'}×${block.attachment.height || '?'} · ${block.attachment.mediaType || ''}`
+    card.append(img, meta)
+    appendReadable(card)
+  }
+}
+
+/** 原始 SessionEvent 按 turn 聚合到一个折叠区，数据完整保留但不刷屏。 */
+function addRawEvent(event) {
+  ensureTurn()
+  if (!currentRawGroup || currentRawGroup.parentNode !== currentTurn) {
+    currentRawEvents = []
+    currentRawCounts = {}
+    currentRawGroup = document.createElement('details')
+    currentRawGroup.className = 'raw-event'
+    currentRawGroup.append(document.createElement('summary'), document.createElement('pre'))
+    const group = currentRawGroup
+    const events = currentRawEvents
+    group.addEventListener('toggle', () => {
+      if (group.open) group.querySelector('pre').textContent = pretty(events)
+    })
+    currentTurn.appendChild(currentRawGroup)
+  }
+  currentRawEvents.push(event)
+  const type = event?.type || 'unknown'
+  currentRawCounts[type] = (currentRawCounts[type] || 0) + 1
+  const counts = Object.entries(currentRawCounts).map(([name, n]) => `${name}×${n}`).join(' · ')
+  currentRawGroup.querySelector('summary').textContent = `原始事件 ${currentRawEvents.length} 条 · ${counts}`
+  // 折叠时只维护计数；展开时才序列化完整数据，避免数千个 chunk 造成 O(n²) DOM 更新。
+  if (currentRawGroup.open) currentRawGroup.querySelector('pre').textContent = pretty(currentRawEvents)
+  return currentRawGroup
+}
+
+function ensureTurn() {
+  if (!currentTurn) {
+    currentTurn = document.createElement('div')
+    currentTurn.className = 'turn'
+    ;(turnParent || $chat).appendChild(currentTurn)
+  }
+}
+
+/** 把累积的 pendingReasoning flush 为一个折叠的 details/summary,
+ *  位置紧贴「将要创建的 assistant message 之前」, 即 turn 末尾
+ *  (此时还没有 assistant message) 或 currentAssistantMsg 之前。
+ *  opts.expanded=true 时默认展开 (实时流式给用户看), 否则折叠 (历史/兜底). */
+function flushReasoning(opts = {}) {
+  if (!pendingReasoning || !currentTurn) return
+  const details = document.createElement('details')
+  details.className = 'msg reasoning'
+  const summary = document.createElement('summary')
+  summary.textContent = '思考过程'
+  const content = document.createElement('div')
+  content.className = 'reasoning-content'
+  content.textContent = pendingReasoning
+  details.appendChild(summary)
+  details.appendChild(content)
+  if (opts.expanded) details.setAttribute('open', '')
+  if (currentAssistantMsg && currentAssistantMsg.parentNode === currentTurn) {
+    currentTurn.insertBefore(details, currentAssistantMsg)
+  } else {
+    appendReadable(details)
+  }
+  pendingReasoning = ''
+}
+
+/** 完成当前 assistant message: 先 flush reasoning (紧邻), 然后清空
+ *  currentAssistantMsg 让下一轮 chunk 创建新的 assistant message。
+ *  tool_call / assistant_message / turn_end 时调用。 */
+function finalizeAssistant() {
+  flushReasoning()
+  currentAssistantMsg = null
+}
+
+/** 确保有 currentAssistantMsg, 没有则先 flush reasoning 再创建。 */
+function ensureAssistantMsg(time) {
+  if (currentAssistantMsg) return
+  flushReasoning()
+  currentAssistantMsg = addMsg('assistant', '', time)
+}
+
+function endTurn() {
+  // 兜底 flush (只在只有 reasoning 没有 text 的情况下残留)
+  flushReasoning()
+  if (currentTurn) {
+    const sep = document.createElement('hr')
+    sep.className = 'turn-sep'
+    currentTurn.appendChild(sep)
+  }
+  currentTurn = null
+  currentAssistantMsg = null
+  currentToolMsg = null
+  currentRawGroup = null
+  currentRawEvents = []
+  currentRawCounts = {}
+}
+
+function scrollBottom() {
+  $chat.scrollTop = $chat.scrollHeight
+}
+
+/** 把一批历史事件渲染到 DocumentFragment, 然后 prepend 到 chat 顶部.
+ *  用 fragment 让 prepend 是单次 DOM 操作 (快, 滚动位置自然保持).
+ *  渲染期间 turnParent 指向 fragment, renderHistoricalEvent 通过 addMsg/ensureTurn
+ *  会自动把 turn/msg append 到 fragment. */
+function renderHistoricalBatchPrepend(events) {
+  if (events.length === 0) return
+  const frag = document.createDocumentFragment()
+  const savedParent = turnParent
+  turnParent = frag
+  currentTurn = null
+  currentAssistantMsg = null
+  currentToolMsg = null
+  pendingReasoning = ''
+  currentRawGroup = null
+  currentRawEvents = []
+  currentRawCounts = {}
+
+  for (const e of events) renderHistoricalEvent(e)
+
+  $chat.insertBefore(frag, $chat.firstChild)
+
+  // 恢复状态 (后续实时渲染回到 $chat)
+  turnParent = savedParent || $chat
+  currentTurn = null
+  currentAssistantMsg = null
+  currentToolMsg = null
+  pendingReasoning = ''
+}
+
+// ── 全量重载 (切回 tab / SSE 重连时同步历史, 避免切走期间事件丢失) ─────
+// dsh 的 SSE 不重发历史: tab 切走后完成的 assistant output, 切回时
+// EventSource 重连也补不上。visibilitychange 或 SSE onopen 时断开重连 +
+// 从 session.jsonl 全量重建, 保证 chat 与 server 端 session 始终一致。
+let sse = null
+let initialLoadDone = false
+let reloading = false
+
+async function fullReload() {
+  if (reloading) return
+  reloading = true
+  try {
+    if (sse) { sse.close(); sse = null }
+    $chat.replaceChildren()
+    currentTurn = currentAssistantMsg = currentToolMsg = null
+    pendingReasoning = ''
+    currentRawGroup = null
+    currentRawEvents = []
+    currentRawCounts = {}
+    await loadInteractionEndpoint()
+    await loadInitialHistory()
+    sse = connectSSE()
+  } finally {
+    reloading = false
+  }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) fullReload()
+})
+
+// ── SSE 连接 ────────────────────────────────────────────────────────────────
+function connectSSE() {
+  if (!httpChannelEnabled) return null
+  const es = new EventSource(withAuth('/api/stream'))
+
+  es.onopen = () => {
+    setStatus('connected', '已连接')
+    initialLoadDone = true
+    // 注意: 不在这里触发 fullReload, 否则 SSE 频繁断线重连会一直闪屏
+    // 历史只在初次加载 + visibilitychange 切回 tab 时刷新
+  }
+
+  es.onmessage = (e) => {
+    try {
+      const { type, data } = JSON.parse(e.data)
+      handleSSEEvent(type, data)
+    } catch (err) {
+      console.error('SSE parse error:', err)
+    }
+  }
+
+  es.onerror = () => {
+    setStatus('', '连接断开, 重连中...')
+  }
+
+  return es
+}
+
+function setStatus(cls, text) {
+  $dot.className = cls
+  $statusText.textContent = text
+}
+
+function handleSSEEvent(type, data) {
+  switch (type) {
+    case 'connected':
+      setStatus('connected', `已连接 — ${data.sessionId ?? ''}`)
+      break
+
+    case 'session_event':
+      addRawEvent(data)
+      scrollBottom()
+      break
+
+    case 'turn_start':
+      ensureTurn()
+      setStatus('running', `Turn ${data.turn} 进行中...`)
+      break
+
+    case 'scene_event':
+      // Godot 场景事件（玩家说话/互动/其它助手说话），作为 user 一方渲染
+      ensureTurn()
+      addMsg('user-event', formatSceneEvent(data.text || ''))
+      scrollBottom()
+      break
+
+    case 'system_event':
+      addSystemEvent(data)
+      scrollBottom()
+      break
+
+    case 'model_input': {
+      ensureTurn()
+      const kind = data.source?.kind || 'unknown'
+      const label = kind === 'user' ? '用户输入' : `上下文输入 · ${kind}${data.source?.plugin ? ' / ' + data.source.plugin : ''}`
+      const text = plainText(data.content)
+      if (kind === 'user') {
+        if (text) addMsg('user', text)
+        addInputImages(data.content)
+      } else addMsg('context-input', `${label}\n${text || contentText(data.content)}`)
+      scrollBottom()
+      break
+    }
+
+    case 'model_request': {
+      const visible = {
+        系统提示词: data.system,
+        消息: data.messages,
+        工具定义: data.tools,
+        调用参数: data.settings,
+      }
+      addDetail(`发送给模型 · ${data.provider}/${data.model} · ${data.messages?.length || 0} 条消息 · ${data.tools?.length || 0} 个工具`, visible)
+      scrollBottom()
+      break
+    }
+
+    case 'chunk':
+      ensureTurn()
+      if (data.kind === 'text-delta' && data.text) {
+        // 先确保 assistant message 存在 (会 flush reasoning 到它之前)
+        ensureAssistantMsg()
+        currentAssistantMsg.textContent += data.text
+        scrollBottom()
+      } else if (data.kind === 'reasoning-delta' && data.text) {
+        // reasoning 只累积, 等下一个 text/tool_call/turn_end 时 flush
+        pendingReasoning += data.text
+      }
+      break
+
+    case 'tool_call':
+      // 上一段 assistant message 完成, tool 是独立的卡片
+      finalizeAssistant()
+      const stageSpeech = formatStageSpeech(data.name, data.arguments)
+      const liveToolArgs = toolArgsObject(data.arguments)
+      if (stageSpeech) addMsg('assistant-stage', stageSpeech)
+      currentToolMsg = addMsg('tool', `${stageSpeech ? `🎬 ${liveToolArgs.command}` : `🔧 调用工具 ${data.name}`}\n参数：\n${pretty(data.arguments)}`)
+      scrollBottom()
+      break
+
+    case 'tool_result':
+      if (!currentToolMsg) currentToolMsg = addMsg('tool', `🔧 工具结果${data.name ? ' · ' + data.name : ''}`)
+      currentToolMsg.className = 'msg tool ' + (data.isError ? 'error' : 'done')
+      currentToolMsg.textContent += `\n${data.isError ? '❌ 失败' : '✓ 完成'}${data.text ? `\n结果：\n${data.text}` : data.content ? `\n结果：\n${pretty(data.content)}` : ''}`
+      currentToolMsg = null
+      scrollBottom()
+      break
+
+    case 'turn_end':
+      finalizeAssistant()
+      setStatus('connected', `Turn ${data.turn} 完成 (${data.reason ?? ''})`)
+      endTurn()
+      scrollBottom()
+      break
+
+    case 'assistant_message':
+      // 用最终消息校正流式文本；chunk 只负责实时显示，不产生额外卡片。
+      const finalText = contentText(data.message?.content?.filter(block => block.type === 'text'))
+      if (finalText) {
+        ensureAssistantMsg()
+        currentAssistantMsg.textContent = finalText
+      }
+      finalizeAssistant()
+      const outputTokens = data.usage?.outputTokens ?? data.usage?.output_tokens
+      setStatus('connected', `就绪 — ${outputTokens ? outputTokens + ' tokens' : ''}`)
+      break
+  }
+}
+
+// ── 发送消息 ────────────────────────────────────────────────────────────────
+function fileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = () => reject(reader.error || new Error('读取图片失败'))
+    reader.readAsDataURL(file)
+  })
+}
+
+function renderPendingImages() {
+  $attachmentPreview.replaceChildren()
+  $attachmentPreview.style.display = pendingImageFiles.length ? 'flex' : 'none'
+  pendingImageFiles.forEach((file, index) => {
+    const item = document.createElement('div')
+    item.className = 'pending-image'
+    const img = document.createElement('img')
+    const objectUrl = URL.createObjectURL(file)
+    img.src = objectUrl
+    img.onload = () => URL.revokeObjectURL(objectUrl)
+    const remove = document.createElement('button')
+    remove.type = 'button'
+    remove.textContent = '×'
+    remove.onclick = () => {
+      pendingImageFiles.splice(index, 1)
+      renderPendingImages()
+    }
+    const name = document.createElement('span')
+    name.textContent = file.name
+    item.append(img, remove, name)
+    $attachmentPreview.appendChild(item)
+  })
+}
+
+async function sendMessage() {
+  if (!httpChannelEnabled) return
+  const text = $input.value.trim()
+  if (!text && pendingImageFiles.length === 0) return
+
+  // Session 的 user/message 事件是唯一渲染来源，可同时覆盖网页、Stage 和其它客户端。
+  $send.disabled = true
+  $attach.disabled = true
+  try {
+    const images = await Promise.all(pendingImageFiles.map(async file => ({
+      data: await fileAsDataUrl(file),
+      mimeType: file.type,
+      name: file.name,
+    })))
+    const response = await apiFetch('/api/message', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, images }),
+    })
+    const result = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`)
+    $input.value = ''
+    pendingImageFiles = []
+    $imageInput.value = ''
+    renderPendingImages()
+  } catch (err) {
+    ensureTurn()
+    addMsg('tool error', `发送失败: ${err.message}`)
+    endTurn()
+    scrollBottom()
+  } finally {
+    $send.disabled = !httpChannelEnabled
+    $attach.disabled = !httpChannelEnabled
+  }
+}
+
+// ── 观测面板 ────────────────────────────────────────────────────────────────
+function fmtDuration(ms) {
+  if (!ms) return '0s'
+  const s = Math.floor(ms / 1000)
+  if (s < 60) return s + 's'
+  const m = Math.floor(s / 60)
+  const r = s % 60
+  return m + '分' + r + '秒'
+}
+
+function fmtTokens(n) {
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M'
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'K'
+  return String(Math.round(n))
+}
+
+async function refreshObservability() {
+  try {
+    const res = await apiFetch('/api/observability')
+    if (!res.ok) return
+    const o = await res.json()
+
+    document.getElementById('obs-turn').textContent = `${o.turns} 轮 · ${o.steps} 步`
+    document.getElementById('obs-time').textContent =
+      `LLM ${fmtDuration(o.llmMs)} · 工具 ${fmtDuration(o.toolMs)}`
+    document.getElementById('obs-speed').textContent =
+      `首 token ${o.avgTtftMs > 0 ? (o.avgTtftMs / 1000).toFixed(1) + '秒' : '-'} · ${o.tokensPerSecond.toFixed(0)} tok/s`
+    document.getElementById('obs-cache').textContent =
+      `缓存命中 ${(o.cacheHitRate * 100).toFixed(0)}%`
+
+    const inputTotal = o.uncachedInputTokens + o.cacheReadTokens + o.cacheWriteTokens
+    document.getElementById('obs-io').textContent =
+      `输入 ${fmtTokens(inputTotal)} · 输出 ${fmtTokens(o.outputTokens)}`
+
+    if (o.contextWindow) {
+      const pct = Math.round((o.totalTokens / o.contextWindow) * 100)
+      document.getElementById('obs-ctx').textContent =
+        `${pct}% ~${fmtTokens(o.totalTokens)} / ${fmtTokens(o.contextWindow)}`
+      const fill = document.getElementById('ctx-bar-fill')
+      fill.style.width = Math.min(100, pct) + '%'
+      fill.className = pct > 85 ? 'danger' : pct > 65 ? 'warn' : ''
+    }
+
+    document.getElementById('obs-breakdown').textContent =
+      `系统 ~${fmtTokens(o.systemTokens)} · 工具 ~${fmtTokens(o.toolsTokens)} · 对话 ~${fmtTokens(o.messageTokens)}`
+    const memory = o.memory?.idleCompaction
+    if (memory) {
+      const labels = { compacted: '压缩完成', skipped: '无可压缩历史', failed: '压缩失败', cancelled: '已取消' }
+      const next = memory.running ? '正在压缩' : memory.nextRunAt
+        ? `下次检查 ${new Date(memory.nextRunAt).toLocaleTimeString()}` : '等待新会话活动'
+      const node = document.getElementById('obs-memory')
+      node.textContent = `记忆 · ${next}${memory.lastOutcome ? ' · ' + (labels[memory.lastOutcome] || memory.lastOutcome) : ''}`
+      node.title = memory.lastError || (memory.lastRunAt ? `上次检查: ${new Date(memory.lastRunAt).toLocaleString()}` : '连续空闲 30 分钟后检查是否可压缩')
+    }
+  } catch (err) {
+    // 忽略, 下次重试
+  }
+}
+
+// ── 历史回放 ────────────────────────────────────────────────────────────────
+// dsh 持久化的事件 (assistant/chunk 不持久化) 转成与实时 SSE 相同的渲染路径。
+function renderHistoricalEvent(event) {
+  const { type, data } = event
+  // 历史接口本身返回完整 SessionEvent；先无条件画原始事件，再追加可读投影。
+  addRawEvent(event)
+  switch (type) {
+    case 'turn/start':
+      ensureTurn()
+      break
+    case 'user/message': {
+      const kind = data.source?.kind
+      if (kind === 'event' || kind === 'stage-event') {
+        // Godot 场景事件，作为 user 一方渲染
+        ensureTurn()
+        const text = (data.content || [])
+          .filter(b => b.type === 'text')
+          .map(b => b.text)
+          .join(' ')
+        if (text.trim()) addMsg('user-event', formatSceneEvent(text), event.time)
+        break
+      }
+      if (kind === 'system-event' || kind === 'scheduled-task') {
+        ensureTurn()
+        const text = contentText(data.content)
+        addSystemEvent({ text, content: data.content || [], source: data.source || {}, turn: data.turn, eventType: data.source?.eventType }, event.time)
+        break
+      }
+      ensureTurn()
+      const text = plainText(data.content)
+      if (kind === 'user') {
+        if (text.trim()) addMsg('user', text, event.time)
+        addInputImages(data.content, event.time)
+      } else if (kind !== 'tool' && (text.trim() || contentText(data.content).trim())) {
+        addMsg('context-input', `上下文输入 · ${kind || 'unknown'}${data.source?.plugin ? ' / ' + data.source.plugin : ''}\n${text || contentText(data.content)}`, event.time)
+      }
+      break
+    }
+    case 'assistant/message': {
+      const content = data.message?.content || []
+      const reasoning = content.filter(b => b.type === 'reasoning').map(b => b.text).join('').trim()
+      const text = content.filter(b => b.type === 'text').map(b => b.text).join('').trim()
+      // reasoning 用 pendingReasoning 机制 (ensureAssistantMsg 会 flush 到 assistant 之前)
+      if (reasoning) pendingReasoning = reasoning
+      if (text) {
+        ensureAssistantMsg(event.time)
+        currentAssistantMsg.textContent = text
+      }
+      // 完成这条 assistant message (后续若有 tool/call 则另起 tool 卡片)
+      finalizeAssistant()
+      break
+    }
+    case 'tool/call':
+      finalizeAssistant()
+      const stageSpeech = formatStageSpeech(data.name, data.arguments)
+      const historicalToolArgs = toolArgsObject(data.arguments)
+      if (stageSpeech) addMsg('assistant-stage', stageSpeech, event.time)
+      currentToolMsg = addMsg('tool', `${stageSpeech ? `🎬 ${historicalToolArgs.command}` : `🔧 调用工具 ${data.name}`}\n参数：\n${pretty(data.arguments)}`, event.time)
+      break
+    case 'tool/result':
+      if (!currentToolMsg) currentToolMsg = addMsg('tool', '🔧 工具结果', event.time)
+      const toolBlock = (data.message?.content || []).find(block => block.type === 'tool-result')
+      const isErr = !!(data.error || data.isError || toolBlock?.isError)
+      const resultText = contentText(toolBlock?.content || data.content)
+      currentToolMsg.className = 'msg tool ' + (isErr ? 'error' : 'done')
+      currentToolMsg.textContent += `\n${isErr ? '❌ 失败' : '✓ 完成'}${resultText ? `\n结果：\n${resultText}` : ''}`
+      currentToolMsg = null
+      break
+    case 'turn/end':
+      finalizeAssistant()
+      endTurn()
+      break
+  }
+}
+
+// ── 历史历史拉取 ────────────────────────────────────────────────────────────────
+// 反向分页: 首次拿最后 limit 条 (最新), 上翻再拿更早的
+let nextBeforeForOlder = null  // 上翻用的 ?before
+let loadingOlder = false       // 防并发上翻
+
+async function loadInitialHistory() {
+  // 反向分页抓全（每批 limit 上限 5000），最后按时间顺序拼起来一次渲染。
+  // 之前只渲染了「含 turn_start 的那一批」，把更新的批次（turn 的尾巴）丢掉了，
+  // 导致超长会话（> 5000 事件）看不到最新内容。这里改成累积所有批次。
+  const limit = 5000
+  const batches = []   // 最终按 [oldest, ..., newest] 排列
+  let before = null
+  while (true) {
+    try {
+      const url = before !== null
+        ? `/api/history?before=${before}&limit=${limit}`
+        : `/api/history?limit=${limit}`
+      const res = await apiFetch(url)
+      if (!res.ok) return
+      const { events, hasMore, nextBefore } = await res.json()
+      if (events.length === 0) break
+      batches.unshift(events)   // 新抓的更老，插到最前
+      if (!hasMore) break
+      before = nextBefore
+    } catch (err) {
+      console.error('Failed to load history:', err)
+      return
+    }
+  }
+
+  if (batches.length === 0) return
+
+  // 拼成一条时间线，去掉最老批次开头的不完整 turn 片段
+  const all = batches.flat()
+  const startIdx = all.findIndex(e => e.type === 'turn/start')
+  renderHistoricalBatchPrepend(startIdx !== -1 ? all.slice(startIdx) : all)
+
+  // 已经抓全（循环以 hasMore=false 结束），没有更早的历史可上翻
+  nextBeforeForOlder = null
+  scrollBottom()
+}
+
+function renderHistoryBatch(events, hasMore, nextBefore) {
+  if (events.length === 0) return
+  // 找到第一个 turn_start, 丢弃之前的不完整片段 (turn 中间开始的)
+  let startIdx = events.findIndex(e => e.type === 'turn/start')
+  if (startIdx === -1) {
+    // 这批全在 turn 中间, 丢弃 (这种情况很少, 通常 hasMore 后 nextBefore 会重新对齐)
+    if (!hasMore) return
+    nextBeforeForOlder = nextBefore
+    return
+  }
+  const validEvents = events.slice(startIdx)
+  renderHistoricalBatchPrepend(validEvents)
+  // 更新上翻标记
+  if (hasMore) {
+    // 用 validEvents 第一个事件之前的事件的 seq 作为下次 before
+    // validEvents[0] 是 turn_start. 它之前的事件 (被丢弃的) 的 seq 就是 nextBefore 之前的位置
+    // nextBefore = validEvents[0].seq (下次拿这之前的事件)
+    // 但 validEvents[0].seq 已经在 DOM 里, 不需要拿
+    // 实际上: nextBefore (来自 API) 是这批的 start seq, validEvents 从这里开始
+    // 如果丢弃了前面的, 下次拿 nextBefore 还是会拿到这批的开头
+    // 简化: 用 validEvents[0].seq 作为上翻 before
+    nextBeforeForOlder = validEvents[0].seq
+  } else {
+    nextBeforeForOlder = null  // 没有更多了, 禁用上翻
+  }
+}
+
+async function loadOlderMessages() {
+  if (loadingOlder || nextBeforeForOlder === null) return
+  loadingOlder = true
+  try {
+    const res = await apiFetch(`/api/history?before=${nextBeforeForOlder}&limit=100`)
+    if (!res.ok) return
+    const { events, hasMore, nextBefore } = await res.json()
+    if (events.length === 0) return
+    // 保留滚动位置: 记录加载前 scrollHeight 和 scrollTop, 加载后调整
+    const oldScrollHeight = $chat.scrollHeight
+    const oldScrollTop = $chat.scrollTop
+    renderHistoricalBatchPrepend(events)
+    const newScrollHeight = $chat.scrollHeight
+    $chat.scrollTop = oldScrollTop + (newScrollHeight - oldScrollHeight)
+    // 更新上翻标记 (如果这批有丢弃, 用 nextBefore; 否则用 events[0].seq)
+    if (hasMore) {
+      nextBeforeForOlder = nextBefore
+    } else {
+      nextBeforeForOlder = null
+    }
+  } catch (err) {
+    console.error('Failed to load older messages:', err)
+  } finally {
+    loadingOlder = false
+  }
+}
+
+// 监听 chat 滚动, 滚到顶部时触发上翻
+$chat.addEventListener('scroll', () => {
+  if ($chat.scrollTop <= 5) loadOlderMessages()
+})
+
+// ── 事件绑定 ────────────────────────────────────────────────────────────────
+$send.onclick = sendMessage
+$attach.onclick = () => $imageInput.click()
+$imageInput.onchange = () => {
+  pendingImageFiles.push(...Array.from($imageInput.files || []))
+  $imageInput.value = ''
+  renderPendingImages()
+}
+// IME 兼容：中文拼音输入法在候选词阶段按的回车 (keydown.isComposing=true)
+// 是「确认候选词」而非「发送消息」，必须吞掉；只有真正的回车才发送。
+$input.onkeydown = (e) => {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+    e.preventDefault()
+    sendMessage()
+  }
+}
+
+// ── 启动 ────────────────────────────────────────────────────────────────────
+// 先加载历史 (再连 SSE 避免竞态), 首次只拿最新 limit 条 (上翻再加载更早)
+// 注: sse 是模块级 let (fullReload 会重新赋值), 不用 const
+;(async () => {
+  await loadInteractionEndpoint()
+  await loadInitialHistory()
+  sse = connectSSE()
+  refreshObservability()
+  setInterval(refreshObservability, 2000)
+  // 主动 focus 输入框: 跨域 iframe 内的 autofocus 会被浏览器阻止,
+  // 改用 JS 主动 .focus() (脚本调用不受跨域限制), 跨域/同源都能抢焦点
+  document.getElementById('input').focus()
+})().catch(error => setStatus('', error.message))
+</script>
+</body>
+</html>

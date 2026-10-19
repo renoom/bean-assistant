@@ -1,0 +1,97 @@
+@startuml 07-stage-composition
+' 舞台图层与节点树：谁盖在谁上面，谁负责什么
+title 舞台合成 —— 图层 z 序 与 Godot 节点树
+
+skinparam defaultFontName "Sans Serif"
+skinparam componentStyle rectangle
+skinparam packageStyle rectangle
+
+package "VNStage  （z 从下往上）" {
+
+  package "z=0  BackgroundLayer" #E3F2FD {
+    component "背景  TextureRect\n（外部路径加载的图片）" as BgTex
+    note bottom of BgTex
+      **没设背景时** = 中性底色（取自主题）。
+      这是合法初始态，不是缺失态。
+    end note
+  }
+
+  package "z=10  PropLayer / behind" #E1F5FE {
+    component "道具（角色**身后**）\nid + 路径 + 槽位/坐标 + scale" as PropBack
+  }
+
+  package "z=20  CharacterLayer" #F1F8E9 {
+    component "CharacterRig\n**整张情绪立绘**（一个 Sprite2D）" as Sprite
+    component "呼吸 / 入退场 / 说话时轻微起伏\n（Tween，与图片无关）" as Motion
+    note right of Sprite
+      **不做分层部件。**
+      图片生成器很难产出可分离且
+      风格一致的部件（眉毛单独一张图，
+      风格必然飘）；但「同一角色换表情」
+      它靠参考图做得到。
+      → 一个情绪一张整图，槽位固定：
+      neutral / happy / sad / angry /
+      surprised / thinking / embarrassed / tired
+    end note
+  }
+
+  package "z=30  PropLayer / front" #FFF3E0 {
+    component "道具（角色**身前**）" as PropFront
+  }
+
+  package "z=40  FxLayer" #FFF8E1 {
+    component "转场（淡入淡出 / 交叉淡化）" as Trans
+    component "镜头（轻微 shake / zoom）" as Cam
+  }
+
+  package "z=50  DialogueLayer" #FFFDE7 {
+    component "NamePlate  名牌" as Name
+    component "DialogueBox  台词 + 打字机 + ▼" as Box
+    component "InputBar  输入栏（说话时收起）" as Input
+    note bottom of Box
+      **冷启动时，画面上只有这一层。**
+    end note
+  }
+
+  package "z=60  OverlayLayer" #F3E5F5 {
+    component "ChoicePanel  选项气泡（vn_ask）" as Choice
+    component "BacklogPanel  会话记录 «默认隐藏»" as Backlog
+    component "StatusHud  连接态 / 忙碌小指示" as Hud
+    component "SettingsMenu" as Settings
+    component "DebugOverlay  «F3, 默认关»\n原始事件 / 被丢弃的思考与工具" as Debug
+  }
+}
+
+Sprite -[hidden]- Motion
+PropBack -[hidden]- PropFront
+
+note as N1
+  **节点树（client/scenes/stage/vn_stage.tscn）**
+
+  VNStage (Node2D)
+  ├── BackgroundLayer (Node2D, z=0)
+  │   └── Bg (TextureRect)                ← 外部图片，未设时隐藏
+  ├── PropLayerBehind (Node2D, z=10)
+  │   └── <动态生成的 Sprite2D，按 id 索引>
+  ├── CharacterLayer (Node2D, z=20)
+  │   └── Rig (CharacterRig)              ← 未注册角色时不实例化
+  │       └── Sprite (Sprite2D)           ← 整张情绪立绘
+  ├── PropLayerFront (Node2D, z=30)
+  ├── FxLayer (CanvasLayer, layer=1)
+  ├── DialogueLayer (CanvasLayer, layer=2)
+  │   ├── NamePlate / DialogueBox / InputBar
+  └── OverlayLayer (CanvasLayer, layer=3)
+      ├── ChoicePanel / BacklogPanel / StatusHud
+      ├── SettingsMenu
+      └── DebugOverlay
+end note
+
+note as N2 #E8F5E9
+  **除 FxLayer 与 DialogueLayer 外，
+  所有层的内容都持久化**
+  （user://stage/<sessionId>.json）——
+  关掉重开原样恢复，
+  只有 AI 再调工具才会变。（§9.6）
+end note
+
+@enduml

@@ -1,0 +1,2536 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 助手控制台</title>
+  <style>
+    :root {
+      --bg: #f5f6f8;
+      --panel: #fff;
+      --border: #e4e6eb;
+      --accent: #007aff;
+      --accent-hover: #0062cc;
+      --text: #1c1e21;
+      --muted: #65676b;
+      --online: #34c759;
+      --offline: #ccc;
+      --starting: #ff9500;
+      --danger: #ff3b30;
+      --hot: #007aff;
+      --cold: #af52de;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", sans-serif;
+      display: flex; flex-direction: column; height: 100vh;
+      background: var(--bg); color: var(--text); font-size: 14px;
+    }
+    button { font-family: inherit; }
+
+    /* header */
+    header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 20px; background: var(--panel);
+      border-bottom: 1px solid var(--border);
+    }
+    header h1 { font-size: 17px; font-weight: 600; }
+    header .sub { font-size: 12px; color: var(--muted); }
+    header .spacer { flex: 1; }
+    header button {
+      padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 500;
+      cursor: pointer; border: 1px solid var(--border); background: var(--panel);
+    }
+    header button:hover { background: #f0f2f5; }
+    header #btn-create { background: var(--accent); color: #fff; border-color: var(--accent); }
+    header #btn-create:hover { background: var(--accent-hover); }
+
+    /* layout */
+    main { flex: 1; display: flex; min-height: 0; }
+
+    aside {
+      width: 340px; min-width: 340px; border-right: 1px solid var(--border);
+      background: var(--panel); display: flex; flex-direction: column;
+    }
+    aside .list-header {
+      padding: 12px 16px; font-size: 13px; color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+    #assistant-list { flex: 1; overflow-y: auto; padding: 8px; }
+    .card {
+      display: flex; align-items: center; gap: 10px; padding: 12px;
+      border-radius: 10px; margin-bottom: 6px; cursor: pointer;
+      border: 1px solid transparent; transition: background .15s, border .15s;
+    }
+    .card:hover { background: #f0f2f5; }
+    .card.active { border-color: var(--accent); background: #eef4ff; }
+    .card .dot {
+      width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; background: var(--offline);
+    }
+    .card .dot.online { background: var(--online); }
+    .card .dot.starting { background: var(--starting); animation: pulse 1s infinite; }
+    @keyframes pulse { 50% { opacity: .4; } }
+    .card .meta { flex: 1; min-width: 0; }
+    .card .meta .name { font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+    .card .meta .info { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .card .actions { display: flex; gap: 4px; }
+    .card button {
+      border: none; background: transparent; color: #a0a3a8; font-size: 15px;
+      cursor: pointer; padding: 3px 6px; border-radius: 6px;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .card button svg { display: block; }
+    .card button:hover { color: #333; background: #ececec; }
+    .card .stop:hover { color: var(--danger); background: #fff0ef; }
+    .card .start:hover { color: #16a34a; background: #e8f7ee; }
+    .pending-badge {
+      display: inline-block; padding: 2px 7px; font-size: 11px; line-height: 16px;
+      background: #fff2e5; color: #c2570a; border: 1px solid #ffd7b3; border-radius: 10px;
+      white-space: nowrap;
+    }
+    .empty { padding: 40px 16px; text-align: center; color: var(--muted); font-size: 13px; }
+
+    section { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+    section .placeholder {
+      flex: 1; display: flex; align-items: center; justify-content: center;
+      color: var(--muted); font-size: 14px;
+    }
+    .frames { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+    .frames iframe { flex: 1 1 0%; width: 100%; height: 100%; min-height: 0; border: none; }
+
+    /* modals */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.35);
+      display: none; align-items: center; justify-content: center; z-index: 20;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal {
+      background: var(--panel); border-radius: 14px; padding: 22px;
+      width: 640px; max-width: calc(100vw - 40px); max-height: 88vh; overflow-y: auto;
+      box-shadow: 0 10px 40px rgba(0,0,0,.2);
+    }
+    .modal.narrow { width: 430px; }
+    .modal.wide { width: 760px; }
+    .modal.config-modal { width: 980px; padding: 0; overflow: hidden; }
+    .modal.tasks-modal { width: 1080px; }
+    .config-modal > h2 { margin: 0; padding: 20px 22px 14px; border-bottom: 1px solid var(--border); }
+    .config-modal > .pending-banner { margin: 14px 22px 0; }
+    .config-modal > .bar { margin: 14px 22px; }
+    .config-modal > .hint { margin: -6px 22px 14px; }
+    .config-modal > .actions { margin: 0; padding: 14px 22px; border-top: 1px solid var(--border); }
+    .config-workspace { display: grid; grid-template-columns: 190px minmax(0, 1fr); min-height: 430px; border-top: 1px solid var(--border); }
+    .config-nav { padding: 14px 10px; background: #f7f8fa; border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 4px; }
+    .modal .config-nav button { width: 100%; padding: 10px 12px; border-radius: 8px; background: transparent; color: var(--muted); text-align: left; font-size: 13px; }
+    .modal .config-nav button:hover { background: #eceff3; color: var(--text); }
+    .modal .config-nav button.active { background: #e7f0ff; color: var(--accent); font-weight: 600; }
+    .config-pages { padding: 20px 24px; max-height: 52vh; overflow-y: auto; }
+    .config-page[hidden] { display: none; }
+    .config-page-title { font-size: 16px; font-weight: 600; margin-bottom: 5px; }
+    .config-page-desc { color: var(--muted); font-size: 12px; margin-bottom: 18px; line-height: 1.5; }
+    .modal h2 { font-size: 16px; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+    .modal .bar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+    .modal .bar .spacer { flex: 1; }
+    .modal .hint { font-size: 12px; color: var(--muted); margin: -6px 0 12px; }
+    .modal select, .modal input, .modal textarea {
+      width: 100%; padding: 9px 12px; border: 1px solid #ccc;
+      border-radius: 8px; font-size: 14px; outline: none; font-family: inherit;
+    }
+    .modal input:focus, .modal textarea:focus, .modal select:focus { border-color: var(--accent); }
+    .modal textarea { resize: vertical; min-height: 76px; }
+    .modal .actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+    .modal button {
+      padding: 8px 18px; border-radius: 8px; font-size: 14px; cursor: pointer; border: none;
+    }
+    .modal .btn-secondary { background: #e4e6eb; color: var(--text); }
+    .modal .btn-primary { background: var(--accent); color: #fff; font-weight: 500; }
+    .modal .btn-primary:hover { background: var(--accent-hover); }
+    .modal .btn-primary:disabled { opacity: .45; cursor: not-allowed; }
+    .modal .btn-danger { background: #fff0ef; color: var(--danger); }
+    .modal .btn-danger:hover { background: #ffe3e1; }
+    .modal .link {
+      background: none; border: none; color: var(--accent); cursor: pointer;
+      font-size: 12px; padding: 0;
+    }
+    .modal .link:hover { text-decoration: underline; }
+    .tasks-toolbar { display: flex; align-items: center; gap: 10px; margin: -2px 0 14px; }
+    .tasks-toolbar .spacer { flex: 1; }
+    .tasks-note { color: var(--muted); font-size: 12px; }
+    .task-list { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+    .task-item { padding: 14px; border-bottom: 1px solid var(--border); }
+    .task-item:last-child { border-bottom: 0; }
+    .task-item-head { display: flex; align-items: flex-start; gap: 10px; }
+    .task-item-main { flex: 1; min-width: 0; }
+    .task-title { font-weight: 600; }
+    .task-meta, .task-detail { font-size: 12px; color: var(--muted); line-height: 1.55; margin-top: 4px; }
+    .task-prompt { color: #444; margin-top: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .task-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+    .task-actions button { padding: 6px 9px; font-size: 12px; }
+    .task-status { display: inline-block; margin-left: 7px; padding: 1px 7px; border-radius: 9px; font-size: 11px; font-weight: 500; background: #eef4ff; color: var(--accent); }
+    .task-status.paused, .task-status.disabled { background: #f0f1f3; color: var(--muted); }
+    .task-status.error, .task-status.failed { background: #fff0ef; color: var(--danger); }
+    .schedule-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .schedule-fields .field { margin-bottom: 0; }
+    .schedule-fields .full { grid-column: 1 / -1; }
+    .run-list { border: 1px solid var(--border); border-radius: 9px; max-height: 48vh; overflow: auto; }
+    .run-item { padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .run-item:last-child { border-bottom: 0; }
+
+    .field { margin-bottom: 14px; }
+    .field-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .field-head label { font-size: 13px; color: #444; font-weight: 500; }
+    .effect-badge {
+      font-size: 11px; padding: 1px 7px; border-radius: 8px; color: #fff;
+    }
+    .effect-badge.hot { background: var(--hot); }
+    .effect-badge.cold { background: var(--cold); }
+    .source-badge {
+      font-size: 11px; padding: 1px 7px; border-radius: 8px;
+      background: #eef4ff; color: var(--accent);
+    }
+    .source-badge.private { background: #f7edfb; color: var(--cold); }
+    .field input:disabled, .field textarea:disabled { background: #f5f6f8; color: #888; }
+
+    .skills-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+    .skills-grid label {
+      display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+      border: 1px solid var(--border); border-radius: 8px; cursor: pointer; font-size: 13px;
+    }
+    .skills-grid label:hover { background: #f7f8fa; }
+    .skills-grid input { width: auto; }
+
+    .pending-banner {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding: 10px 12px;
+      background: #fff8ed; border: 1px solid #ffd9a8; border-radius: 10px; color: #9a4e00;
+    }
+    .pending-banner button { margin-left: auto; }
+
+    /* skill library */
+    .skill-list { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px; max-height: 230px; overflow-y: auto; }
+    .skill-item { padding: 10px 12px; border-bottom: 1px solid var(--border); cursor: pointer; }
+    .skill-item:last-child { border-bottom: none; }
+    .skill-item:hover { background: #f7f8fa; }
+    .skill-item .skill-name { font-weight: 500; }
+    .skill-item .skill-desc { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .providers-editor { border: 1px solid var(--border); border-radius: 10px; padding: 10px; background: #fafbfc; }
+    .media-editor { border: 1px solid var(--border); border-radius: 10px; padding: 12px; background: #fafbfc; display: flex; flex-direction: column; gap: 12px; }
+    .media-capability { border: 1px solid #d9dee5; border-radius: 10px; padding: 10px; background: #fff; }
+    .media-cap-title { font-weight: 500; font-size: 13px; margin-bottom: 8px; }
+    .media-capability select { width: 100%; max-width: 320px; padding: 7px 9px; border: 1px solid #ccc; border-radius: 7px; font-size: 13px; background: #fff; color: #333; margin-bottom: 10px; }
+    .media-vendor { border-top: 1px dashed #e0e3e8; padding-top: 10px; margin-top: 10px; }
+    .media-vendor-title { font-size: 12px; font-weight: 500; color: var(--muted); margin-bottom: 8px; }
+    .media-vendor-field { display: grid; grid-template-columns: 220px 1fr; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; color: var(--muted); }
+    .media-vendor-field input { width: 100%; padding: 7px 9px; border: 1px solid #ccc; border-radius: 7px; font-size: 13px; background: #fff; color: #333; }
+    .providers-toolbar { display: flex; gap: 8px; margin-bottom: 10px; }
+    .providers-toolbar button { padding: 6px 12px; font-size: 12px; }
+    .provider-card-list { display: flex; flex-direction: column; gap: 10px; }
+    .provider-card { border: 1px solid #d9dee5; border-radius: 10px; padding: 10px; background: #fff; }
+    .provider-card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .provider-card-head strong { font-size: 13px; }
+    .provider-card-actions { display: flex; gap: 8px; }
+    .provider-card-meta { font-size: 12px; color: var(--muted); line-height: 1.5; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+    .provider-card-proto { padding: 2px 6px; border: 1px solid #ccc; border-radius: 6px; font-size: 12px; background: #fff; color: #333; }
+    .provider-card-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .provider-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+    .provider-field input, .provider-field select { width: 100%; padding: 7px 9px; border: 1px solid #ccc; border-radius: 7px; font-size: 13px; background: #fff; color: #333; }
+    .provider-models-title { display: flex; align-items: center; justify-content: space-between; margin: 10px 0 6px; font-size: 13px; font-weight: 500; }
+    .provider-models-list { display: flex; flex-direction: column; gap: 6px; }
+    .model-row { display: grid; grid-template-columns: 2fr 2fr 1fr 1fr 1.4fr auto; gap: 8px; align-items: end; }
+    @media (max-width: 760px) {
+      .modal.config-modal { max-height: 94vh; }
+      .config-workspace { grid-template-columns: 1fr; }
+      .config-nav { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border); }
+      .modal .config-nav button { width: auto; white-space: nowrap; }
+      .config-pages { max-height: 50vh; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🤖 AI 助手控制台</h1>
+  <span class="sub">注册中心 · 管理中心 · 配置中心</span>
+  <span class="spacer"></span>
+  <button id="btn-public">公共配置</button>
+  <button id="btn-skills">技能库</button>
+  <button id="btn-scheduled-tasks">定时任务</button>
+  <button id="btn-auth">API Key</button>
+  <button id="btn-create">+ 创建助手</button>
+</header>
+
+<main>
+  <aside>
+    <div class="list-header" id="list-header">助手列表 (0)</div>
+    <div id="assistant-list"></div>
+  </aside>
+  <section>
+    <div class="placeholder" id="placeholder">← 选择一个助手开始对话</div>
+    <div id="frames" class="frames" style="display:none"></div>
+  </section>
+</main>
+
+<!-- 创建助手对话框 -->
+<div class="modal-overlay" id="create-overlay">
+  <div class="modal narrow">
+    <h2>创建新助手</h2>
+    <div class="field"><div class="field-head"><label>名称</label></div><input id="dlg-name" type="text" value="编码助手"></div>
+    <div class="field"><div class="field-head"><label>模型（可选，留空继承公共配置）</label></div><input id="dlg-model" type="text" placeholder="deepseek-v4-flash"></div>
+    <div class="field"><div class="field-head"><label>Provider（可选）</label></div><input id="dlg-provider" type="text" placeholder="deepseek-official"></div>
+    <div class="field"><div class="field-head"><label>Persona（可选）</label></div><textarea id="dlg-persona" rows="3" placeholder="留空继承公共配置"></textarea></div>
+    <div class="actions">
+      <button class="btn-secondary" id="dlg-cancel">取消</button>
+      <button class="btn-primary" id="dlg-confirm">创建</button>
+    </div>
+  </div>
+</div>
+
+<!-- 助手配置对话框 -->
+<div class="modal-overlay" id="assistant-config-overlay">
+  <div class="modal config-modal">
+    <h2><span>⚙️ 配置</span><span id="cfg-title"></span><span id="cfg-pending-badge"></span></h2>
+    <div class="pending-banner" id="cfg-pending-banner" style="display:none">
+      <span>检测到冷字段变更，重启助手后生效（会话历史会保留）</span>
+      <button class="btn-primary" id="cfg-restart">重启助手</button>
+    </div>
+    <div class="bar">
+      <select id="cfg-mode">
+        <option value="inherit">继承公共</option>
+        <option value="override">私有覆盖</option>
+      </select>
+      <span class="spacer"></span>
+      <button class="btn-secondary" id="cfg-refresh">刷新有效配置</button>
+    </div>
+    <div class="hint" id="cfg-hint">「继承公共」模式下只读展示有效配置；切换到「私有覆盖」后，修改过的字段会保存为该助手的私有配置。</div>
+    <div id="cfg-fields"></div>
+    <div class="actions">
+      <button class="btn-secondary" id="cfg-close">关闭</button>
+      <button class="btn-primary" id="cfg-save" disabled>保存私有覆盖</button>
+    </div>
+  </div>
+</div>
+
+<!-- 公共配置对话框 -->
+<div class="modal-overlay" id="public-config-overlay">
+  <div class="modal config-modal">
+    <h2>🌐 公共配置</h2>
+    <div class="hint">所有未设置私有覆盖的助手继承此配置。冷字段（人设 / Agent.md / Max Tokens）修改后需手动重启各助手。</div>
+    <div id="public-fields"></div>
+    <div class="actions">
+      <button class="btn-secondary" id="public-close">取消</button>
+      <button class="btn-primary" id="public-save">保存公共配置</button>
+    </div>
+  </div>
+</div>
+
+<!-- 供应商添加/编辑对话框 -->
+<div class="modal-overlay" id="provider-modal">
+  <div class="modal wide">
+    <h2 id="provider-modal-title">添加供应商</h2>
+    <input type="hidden" id="provider-kind">
+    <input type="hidden" id="provider-route-old">
+    <div class="field" id="provider-preset-field"><div class="field-head"><label>预设</label></div><select id="provider-preset"></select></div>
+    <div class="field" id="provider-route-field"><div class="field-head"><label>Route（供应商路由名）</label></div><input id="provider-route" type="text" placeholder="openai / anthropic / acme-gateway"></div>
+    <div class="field"><div class="field-head"><label>Display Name</label></div><input id="provider-display" type="text" placeholder="OpenAI"></div>
+    <div class="field"><div class="field-head"><label>API Key Env</label></div><input id="provider-apikeyenv" type="text" placeholder="OPENAI_API_KEY"></div>
+    <div class="field"><div class="field-head"><label>API Key</label></div><input id="provider-apikey" type="password" placeholder="sk-..."></div>
+    <div class="field"><div class="field-head"><label>Base URL</label></div><input id="provider-baseurl" type="text" placeholder="https://api.openai.com/v1"></div>
+    <div class="field" id="provider-api-field"><div class="field-head"><label>API 协议</label></div><select id="provider-api"><option value="openai-completions">openai-completions</option><option value="openai-responses">openai-responses</option><option value="anthropic-messages">anthropic-messages</option></select></div>
+    <div class="field"><div class="field-head"><label>Default Context Window</label></div><input id="provider-context" type="number" placeholder="262144"></div>
+    <div class="field"><div class="field-head"><label>Default Max Tokens</label></div><input id="provider-maxtokens" type="number" placeholder="32768"></div>
+    <div class="field">
+      <div class="field-head"><label>模型列表</label><button class="link" id="provider-add-model" type="button">+ 模型</button></div>
+      <div id="provider-modal-models"></div>
+    </div>
+    <div class="actions">
+      <button class="btn-secondary" id="provider-cancel">取消</button>
+      <button class="btn-primary" id="provider-save">保存供应商</button>
+    </div>
+  </div>
+</div>
+
+<!-- 技能库对话框 -->
+<div class="modal-overlay" id="skills-overlay">
+  <div class="modal wide">
+    <h2>📚 技能库</h2>
+    <div class="hint">技能库维护「技能名 → markdown 正文」。助手配置中勾选技能名后，运行时热下发注册。</div>
+    <div class="skill-list" id="skill-list"></div>
+    <div class="field"><div class="field-head"><label>技能名（kebab-case）</label></div><input id="skill-name" type="text" placeholder="code-review"></div>
+    <div class="field"><div class="field-head"><label>描述</label></div><input id="skill-desc" type="text" placeholder="一句话说明该技能用途"></div>
+    <div class="field"><div class="field-head"><label>正文（markdown）</label></div><textarea id="skill-content" rows="6" placeholder="# 技能正文 markdown..."></textarea></div>
+    <div class="actions">
+      <button class="btn-secondary" id="skill-new">清空/新建</button>
+      <button class="btn-secondary" id="skills-close">关闭</button>
+      <button class="btn-primary" id="skill-save">保存技能</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="auth-overlay">
+  <div class="modal narrow">
+    <h2>🔑 平台 API Key</h2>
+    <div class="hint" id="auth-hint">所有 Console 与助手 API 都需要此 Key。首次启动时 Key 会打印在控制台终端。</div>
+    <div class="field"><div class="field-head"><label>当前 Key（掩码）</label></div><input id="auth-current" type="text" readonly placeholder="未设置"></div>
+    <div class="field"><div class="field-head"><label>输入 API Key</label></div><input id="auth-input" type="password" placeholder="ask_..."></div>
+    <div class="field" id="auth-result-field" style="display:none"><div class="field-head"><label>新 Key（只显示一次）</label></div><input id="auth-result" type="text" readonly></div>
+    <div class="actions">
+      <button class="btn-secondary" id="auth-close">关闭</button>
+      <button class="btn-secondary" id="auth-copy">复制新 Key</button>
+      <button class="btn-secondary" id="auth-generate">生成新 Key</button>
+      <button class="btn-primary" id="auth-save">保存并使用</button>
+    </div>
+  </div>
+</div>
+
+<!-- 定时任务管理 -->
+<div class="modal-overlay" id="scheduled-tasks-overlay">
+  <div class="modal tasks-modal">
+    <h2>🗓️ 定时任务</h2>
+    <div class="tasks-toolbar">
+      <span class="tasks-note">任务唤醒后由创建它的助手处理；投递确认仅表示“已唤醒”。</span>
+      <span class="spacer"></span>
+      <button class="btn-secondary" id="scheduled-tasks-refresh">刷新</button>
+      <button class="btn-primary" id="scheduled-tasks-create">+ 新建任务</button>
+    </div>
+    <div class="task-list" id="scheduled-tasks-list"></div>
+    <div class="actions"><button class="btn-secondary" id="scheduled-tasks-close">关闭</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="scheduled-task-editor-overlay">
+  <div class="modal wide">
+    <h2 id="scheduled-task-editor-title">新建定时任务</h2>
+    <div class="field"><div class="field-head"><label>创建人助手</label></div><select id="scheduled-task-creator"></select><div class="hint" id="scheduled-task-creator-hint"></div></div>
+    <div class="field"><div class="field-head"><label>标题</label></div><input id="scheduled-task-title" maxlength="120" placeholder="例如：每日站会提醒"></div>
+    <div class="field"><div class="field-head"><label>提示词</label></div><textarea id="scheduled-task-prompt" rows="5" placeholder="任务唤醒时发送给该助手的内容"></textarea></div>
+    <div class="field"><div class="field-head"><label>调度方式</label></div><select id="scheduled-task-kind"><option value="once">单次执行</option><option value="interval">固定间隔</option><option value="daily">每天</option></select></div>
+    <div class="schedule-fields" id="scheduled-task-schedule-fields"></div>
+    <div class="actions">
+      <button class="btn-secondary" id="scheduled-task-editor-cancel">取消</button>
+      <button class="btn-primary" id="scheduled-task-editor-save">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="scheduled-task-runs-overlay">
+  <div class="modal wide">
+    <h2 id="scheduled-task-runs-title">运行历史</h2>
+    <div class="run-list" id="scheduled-task-runs-list"></div>
+    <div class="actions"><button class="btn-secondary" id="scheduled-task-runs-close">关闭</button></div>
+  </div>
+</div>
+
+<script>
+const GEAR_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>'
+
+// ── 字段 schema（与 config/types.ts 保持一致的 UI 元数据）──────────────────
+const FIELD_DEFS = [
+  { key: 'provider', label: '供应商 / Provider', type: 'text', effect: 'hot', section: 'model' },
+  { key: 'model', label: '模型 / Model', type: 'text', effect: 'hot', section: 'model' },
+  { key: 'maxTokens', label: 'Max Tokens', type: 'number', effect: 'cold', section: 'model' },
+  { key: 'providers', label: '供应商 / Providers', type: 'providers', effect: 'hot', section: 'providers' },
+  { key: 'persona', label: 'Persona（系统人设）', type: 'textarea', effect: 'cold', section: 'role' },
+  { key: 'agentMd', label: 'Agent.md（指令）', type: 'textarea', effect: 'cold', section: 'role' },
+  { key: 'skills', label: 'Skills（技能下发）', type: 'skills', effect: 'hot', section: 'capabilities' },
+  { key: 'channels', label: 'Channels（通道）', type: 'channels', effect: 'cold', section: 'capabilities' },
+  { key: 'media', label: '图片生成服务', type: 'media', effect: 'hot', section: 'image' },
+  { key: 'webSearch', label: '联网搜索服务', type: 'webSearch', effect: 'hot', section: 'search' },
+  { key: 'environment', label: '环境信息描述（公共，不可覆盖）', type: 'textarea', effect: 'cold', publicOnly: true, section: 'environment' },
+]
+
+const CONFIG_SECTIONS = [
+  { id: 'model', label: '模型选择', description: '选择助手使用的对话模型，并设置单次输出上限。' },
+  { id: 'providers', label: '供应商配置', description: '管理模型供应商、接口地址、凭据和模型能力声明。' },
+  { id: 'role', label: '角色配置', description: '定义助手的身份、人设和长期行为指令。' },
+  { id: 'capabilities', label: '能力与通道', description: '选择助手可用的技能和客户端通信通道。' },
+  { id: 'image', label: '生图模型', description: '配置场景和客户端调用的图片生成服务。' },
+  { id: 'search', label: '网络搜索', description: '使用 dsh 原生 web_search 搜索网络，使用 web_fetch 读取网页。搜索服务独立于当前聊天模型。' },
+  { id: 'environment', label: '运行环境', description: '设置所有助手共享的运行环境说明。' },
+]
+
+// 可选 channel 清单。与后端 config.ts 的 AVAILABLE_CHANNELS 保持一致。
+const CHANNEL_OPTIONS = [
+  { id: 'http', label: 'HTTP 会话' },
+  { id: 'stage', label: 'WS 交互（Godot）' },
+]
+
+// 独立媒体能力 → 厂家清单。目前只实现图片生成（draw_image）。视觉输入跟随 LLM 模型。
+const MEDIA_VENDORS = {
+  imageGen: [
+    { id: 'minimax', label: 'MiniMax（image-01）' },
+    { id: 'siliconflow', label: '硅基流动（Qwen-Image / FLUX）' },
+  ],
+}
+
+// 每家可配字段（apiKey / apiKeyEnv / baseURL / model + 后续可扩展专属参数）。
+const MEDIA_VENDOR_FIELDS = {
+  minimax: [
+    { key: 'apiKey', label: 'API Key', type: 'password' },
+    { key: 'apiKeyEnv', label: 'API Key 环境变量（apiKey 缺省时用）', type: 'text' },
+    { key: 'baseURL', label: 'Base URL（默认 https://api.minimax.cn）', type: 'text' },
+    { key: 'model', label: '模型（默认 image-01）', type: 'text' },
+  ],
+  siliconflow: [
+    { key: 'apiKey', label: 'API Key', type: 'password' },
+    { key: 'apiKeyEnv', label: 'API Key 环境变量（apiKey 缺省时用）', type: 'text' },
+    { key: 'baseURL', label: 'Base URL（默认 https://api.siliconflow.cn）', type: 'text' },
+    { key: 'model', label: '模型（默认 Qwen/Qwen-Image）', type: 'text' },
+  ],
+}
+
+// ── DOM ────────────────────────────────────────────────────────────────────
+const $list = document.getElementById('assistant-list')
+const $listHeader = document.getElementById('list-header')
+const $placeholder = document.getElementById('placeholder')
+const $frames = document.getElementById('frames')
+const $btnCreate = document.getElementById('btn-create')
+const $btnPublic = document.getElementById('btn-public')
+const $btnSkills = document.getElementById('btn-skills')
+const $btnAuth = document.getElementById('btn-auth')
+const $btnScheduledTasks = document.getElementById('btn-scheduled-tasks')
+const $scheduledTasksOverlay = document.getElementById('scheduled-tasks-overlay')
+const $scheduledTasksList = document.getElementById('scheduled-tasks-list')
+const $scheduledTasksRefresh = document.getElementById('scheduled-tasks-refresh')
+const $scheduledTasksCreate = document.getElementById('scheduled-tasks-create')
+const $scheduledTasksClose = document.getElementById('scheduled-tasks-close')
+const $scheduledTaskEditorOverlay = document.getElementById('scheduled-task-editor-overlay')
+const $scheduledTaskEditorTitle = document.getElementById('scheduled-task-editor-title')
+const $scheduledTaskCreator = document.getElementById('scheduled-task-creator')
+const $scheduledTaskCreatorHint = document.getElementById('scheduled-task-creator-hint')
+const $scheduledTaskTitle = document.getElementById('scheduled-task-title')
+const $scheduledTaskPrompt = document.getElementById('scheduled-task-prompt')
+const $scheduledTaskKind = document.getElementById('scheduled-task-kind')
+const $scheduledTaskScheduleFields = document.getElementById('scheduled-task-schedule-fields')
+const $scheduledTaskEditorCancel = document.getElementById('scheduled-task-editor-cancel')
+const $scheduledTaskEditorSave = document.getElementById('scheduled-task-editor-save')
+const $scheduledTaskRunsOverlay = document.getElementById('scheduled-task-runs-overlay')
+const $scheduledTaskRunsTitle = document.getElementById('scheduled-task-runs-title')
+const $scheduledTaskRunsList = document.getElementById('scheduled-task-runs-list')
+const $scheduledTaskRunsClose = document.getElementById('scheduled-task-runs-close')
+const $authOverlay = document.getElementById('auth-overlay')
+const $authHint = document.getElementById('auth-hint')
+const $authCurrent = document.getElementById('auth-current')
+const $authInput = document.getElementById('auth-input')
+const $authResultField = document.getElementById('auth-result-field')
+const $authResult = document.getElementById('auth-result')
+const $authSave = document.getElementById('auth-save')
+const $authGenerate = document.getElementById('auth-generate')
+const $authCopy = document.getElementById('auth-copy')
+const $authClose = document.getElementById('auth-close')
+const $createOverlay = document.getElementById('create-overlay')
+const $dlgName = document.getElementById('dlg-name')
+const $dlgModel = document.getElementById('dlg-model')
+const $dlgProvider = document.getElementById('dlg-provider')
+const $dlgPersona = document.getElementById('dlg-persona')
+const $dlgCancel = document.getElementById('dlg-cancel')
+const $dlgConfirm = document.getElementById('dlg-confirm')
+
+const $cfgOverlay = document.getElementById('assistant-config-overlay')
+const $cfgTitle = document.getElementById('cfg-title')
+const $cfgPendingBadge = document.getElementById('cfg-pending-badge')
+const $cfgPendingBanner = document.getElementById('cfg-pending-banner')
+const $cfgMode = document.getElementById('cfg-mode')
+const $cfgFields = document.getElementById('cfg-fields')
+const $cfgHint = document.getElementById('cfg-hint')
+const $cfgSave = document.getElementById('cfg-save')
+const $cfgClose = document.getElementById('cfg-close')
+const $cfgRestart = document.getElementById('cfg-restart')
+const $cfgRefresh = document.getElementById('cfg-refresh')
+
+const $publicOverlay = document.getElementById('public-config-overlay')
+const $publicFields = document.getElementById('public-fields')
+const $publicSave = document.getElementById('public-save')
+const $publicClose = document.getElementById('public-close')
+
+const $skillsOverlay = document.getElementById('skills-overlay')
+const $skillList = document.getElementById('skill-list')
+const $skillName = document.getElementById('skill-name')
+const $skillDesc = document.getElementById('skill-desc')
+const $skillContent = document.getElementById('skill-content')
+const $skillSave = document.getElementById('skill-save')
+const $skillNew = document.getElementById('skill-new')
+const $skillsClose = document.getElementById('skills-close')
+
+
+const $providerModal = document.getElementById('provider-modal')
+const $providerModalTitle = document.getElementById('provider-modal-title')
+const $providerKind = document.getElementById('provider-kind')
+const $providerRouteOld = document.getElementById('provider-route-old')
+const $providerPresetField = document.getElementById('provider-preset-field')
+const $providerPreset = document.getElementById('provider-preset')
+const $providerRouteField = document.getElementById('provider-route-field')
+const $providerRoute = document.getElementById('provider-route')
+const $providerDisplay = document.getElementById('provider-display')
+const $providerApiKeyEnv = document.getElementById('provider-apikeyenv')
+const $providerApiKey = document.getElementById('provider-apikey')
+const $providerBaseUrl = document.getElementById('provider-baseurl')
+const $providerApiField = document.getElementById('provider-api-field')
+const $providerApi = document.getElementById('provider-api')
+const $providerContext = document.getElementById('provider-context')
+const $providerMaxTokens = document.getElementById('provider-maxtokens')
+const $providerModels = document.getElementById('provider-modal-models')
+const $providerAddModel = document.getElementById('provider-add-model')
+const $providerSave = document.getElementById('provider-save')
+const $providerCancel = document.getElementById('provider-cancel')
+
+let providerModalTarget = null
+
+let assistants = []
+let selectedId = null
+let skillLibrary = []
+let assistantCfgState = null
+let apiKey = localStorage.getItem('assistant-console-api-key') || ''
+let lastAuthPromptAt = 0
+let scheduledTasks = []
+let scheduledTaskEditingId = null
+let scheduledTasksTimer = null
+
+// ── 工具 ────────────────────────────────────────────────────────────────────
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]))
+}
+
+async function api(url, options = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) }
+  if (apiKey) headers.Authorization = `Bearer ${apiKey}`
+  const res = await fetch(url, { ...options, headers })
+  let data = null
+  try { data = await res.json() } catch { /* 非 JSON 响应 */ }
+  if (res.status === 401) {
+    showAuthDialog('API Key 无效或已失效，请重新输入')
+    throw new Error('unauthorized')
+  }
+  if (res.ok) return data
+  const message = data?.error || `HTTP ${res.status}`
+  throw new Error(message)
+}
+
+function maskKey(value) {
+  if (typeof value !== 'string' || value.length === 0) return '未设置'
+  if (value.length <= 12) return '****'
+  return value.slice(0, 8) + '...' + value.slice(-4)
+}
+
+function showAuthDialog(message) {
+  if (message) $authHint.textContent = message
+  $authCurrent.value = maskKey(apiKey)
+  $authOverlay.classList.add('show')
+  const now = Date.now()
+  if (now - lastAuthPromptAt > 1200) {
+    lastAuthPromptAt = now
+    setTimeout(() => $authInput.focus(), 0)
+  }
+}
+
+function closeAuthDialog() {
+  $authOverlay.classList.remove('show')
+}
+
+async function verifyAuthKey(candidate) {
+  const res = await fetch('/api/auth/key', {
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${candidate}` },
+  })
+  let data = null
+  try { data = await res.json() } catch { /* ignore */ }
+  return { ok: res.ok, data }
+}
+
+async function saveAuthKey() {
+  const candidate = $authInput.value.trim()
+  if (candidate.length === 0) {
+    $authHint.textContent = '请输入 API Key'
+    $authInput.focus()
+    return
+  }
+
+  const result = await verifyAuthKey(candidate)
+  if (result.ok === false) {
+    $authHint.textContent = 'API Key 无效，请检查后重试'
+    $authInput.focus()
+    return
+  }
+
+  apiKey = candidate
+  localStorage.setItem('assistant-console-api-key', apiKey)
+  $authCurrent.value = result.data?.maskedKey || maskKey(apiKey)
+  $authResultField.style.display = 'none'
+  $authHint.textContent = 'Key 已保存。可点击「生成新 Key」轮换。'
+  closeAuthDialog()
+  await refresh()
+  reloadAssistantFrames()
+}
+
+async function generateAuthKey() {
+  if (apiKey.length === 0) {
+    showAuthDialog('请先输入并保存当前 API Key')
+    return
+  }
+  try {
+    const result = await api('/api/auth/key/generate', { method: 'POST' })
+    apiKey = result.apiKey
+    localStorage.setItem('assistant-console-api-key', apiKey)
+    $authCurrent.value = result.maskedKey || maskKey(apiKey)
+    $authResultField.style.display = 'block'
+    $authResult.value = result.apiKey
+    $authHint.textContent = '新 Key 已生效。客户端请更新 Key；助手不走入站鉴权，无需重启。'
+    await refresh()
+    reloadAssistantFrames()
+  } catch (err) {
+    $authHint.textContent = '生成失败: ' + (err instanceof Error ? err.message : String(err))
+  }
+}
+
+async function copyAuthResult() {
+  if ($authResult.value.length === 0) {
+    $authHint.textContent = '当前没有待复制的新 Key'
+    return
+  }
+  try {
+    await navigator.clipboard.writeText($authResult.value)
+    $authHint.textContent = '新 Key 已复制到剪贴板'
+  } catch {
+    $authResult.select()
+    document.execCommand('copy')
+    $authHint.textContent = '新 Key 已复制到剪贴板'
+  }
+}
+
+function fieldValue(type, input) {
+  if (type === 'number') {
+    const value = Number(input.value)
+    return Number.isInteger(value) && value > 0 ? value : null
+  }
+  return input.value
+}
+
+function coldKeys(patch) {
+  return Object.keys(patch).filter(key => ['persona', 'agentMd', 'maxTokens', 'channels'].includes(key))
+}
+
+function channelsLabel(channels) {
+  const list = Array.isArray(channels) ? channels.filter(c => typeof c === 'string') : []
+  return list.length > 0 ? list.map(c => ['ws', 'vn', 'ai-town'].includes(c) ? 'stage' : ['webui', 'web-ui'].includes(c) ? 'http' : c).join('+') : '无'
+}
+
+// ── 助手列表渲染 ─────────────────────────────────────────────────────────────
+function render() {
+  $listHeader.textContent = `助手列表 (${assistants.length})`
+
+  if (assistants.length === 0) {
+    $list.innerHTML = '<div class="empty">暂无助手<br>点击右上角「创建助手」启动一个</div>'
+    return
+  }
+
+  $list.innerHTML = ''
+  for (const a of assistants) {
+    const card = document.createElement('div')
+    card.className = 'card' + (a.id === selectedId ? ' active' : '')
+    const pendingBadge = a.pendingRestart ? '<span class="pending-badge">待重启</span>' : ''
+    card.innerHTML = `
+      <div class="dot ${a.status}"></div>
+      <div class="meta">
+        <div class="name">${escapeHtml(a.name)} ${pendingBadge}</div>
+        <div class="info">${escapeHtml(a.host)}:${a.port} · ${escapeHtml(a.model)} · 通道 ${channelsLabel(a.channels)}</div>
+      </div>
+      <div class="actions">
+        <button class="cfg" title="配置">${GEAR_SVG}</button>
+        ${a.status === 'online'
+          ? '<button class="stop" title="停止">⏹</button>'
+          : '<button class="start" title="启动">▶</button>'}
+      </div>
+    `
+    if (a.status === 'online') {
+      card.querySelector('.stop').onclick = (e) => { e.stopPropagation(); stopAssistant(a) }
+    } else {
+      card.querySelector('.start').onclick = (e) => { e.stopPropagation(); startAssistant(a) }
+    }
+    card.querySelector('.cfg').onclick = (e) => { e.stopPropagation(); selectAssistant(a); openAssistantConfig(a) }
+    card.onclick = () => selectAssistant(a)
+    $list.appendChild(card)
+  }
+}
+
+// 每个助手一个常驻 iframe: 首次选中才创建, 之后切换只是 display 切换。
+// iframe 永不卸载 → 历史/滚动/SSE 全部保留, 不重载、不断连。
+const frames = new Map()  // assistant.id -> iframe
+
+// 每个助手的上一次状态, 用于检测 offline → online 转换 → 触发 iframe 重载。
+// 背景: 助手 stop 后 iframe 还停在「无法连接」错误页; start 后 iframe 不会被自动刷新,
+// 必须显式重新赋值 src。Cmd+R 整个控制台会清理所有 iframe 重新加载, 等同于全量重载。
+const lastAssistantStatus = new Map()  // assistant.id -> 'online' | 'offline' | 'starting'
+
+function assistantUiUrl(a, cacheBust = false) {
+  const hash = apiKey ? `#api_key=${encodeURIComponent(apiKey)}` : ''
+  const query = cacheBust ? `?_=${Date.now()}` : ''
+  const base = a.gatewayBase ? `${a.gatewayBase}/` : `http://${a.host}:${a.port}/`
+  return `${base}${query}${hash}`
+}
+
+function reloadAssistantFrames() {
+  for (const [id, frame] of frames) {
+    const assistant = assistants.find(item => item.id === id)
+    if (assistant) frame.src = assistantUiUrl(assistant, true)
+  }
+}
+
+function selectAssistant(a) {
+  selectedId = a.id
+  render()
+  $placeholder.style.display = 'none'
+  $frames.style.display = 'flex'
+
+  let frame = frames.get(a.id)
+  if (!frame) {
+    frame = document.createElement('iframe')
+    frame.src = assistantUiUrl(a)
+    frames.set(a.id, frame)
+    $frames.appendChild(frame)
+  }
+  for (const f of frames.values()) f.style.display = 'none'
+  frame.style.display = 'block'
+}
+
+async function refresh() {
+  try {
+    assistants = await api('/api/assistants')
+
+    // 检测 offline → online 转换: 重新赋值 src (加 cache buster 强制重载) 取代
+    // iframe 里残留的「无法连接」错误页。跨域 iframe 不能用 contentWindow.location.reload
+    // (同源限制), 只能改 src; 加 ?_= 时间戳避免浏览器缓存复用旧文档。
+    for (const a of assistants) {
+      const prev = lastAssistantStatus.get(a.id)
+      if (prev === 'offline' && a.status === 'online') {
+        const frame = frames.get(a.id)
+        if (frame) {
+          frame.src = assistantUiUrl(a, true)
+          console.log(`[console] 检测到 ${a.name} 重启, 重载 iframe`)
+        }
+      }
+      lastAssistantStatus.set(a.id, a.status)
+    }
+    // 已从注册表移除的助手: 清理状态记录 (iframe 仍保留, 不影响)
+    for (const id of lastAssistantStatus.keys()) {
+      if (!assistants.find(a => a.id === id)) lastAssistantStatus.delete(id)
+    }
+
+    if (selectedId && !assistants.find(a => a.id === selectedId)) {
+      selectedId = null
+      $frames.style.display = 'none'
+      $placeholder.style.display = 'flex'
+    }
+    render()
+  } catch (err) {
+    console.error('刷新列表失败:', err)
+  }
+}
+
+// ── 表单字段渲染 ─────────────────────────────────────────────────────────────
+function providerRoutes(providers) {
+  const routes = []
+  const deepseek = providers?.deepseek
+  if (deepseek) {
+    routes.push({
+      route: 'deepseek-official',
+      kind: 'deepseek',
+      displayName: 'DeepSeek',
+      config: deepseek,
+    })
+  }
+  for (const [route, config] of Object.entries(providers?.piAi?.providers || {})) {
+    routes.push({
+      route,
+      kind: 'piAi',
+      displayName: config?.displayName || route,
+      config,
+    })
+  }
+  return routes
+}
+
+function routeModels(routeObj) {
+  const models = routeObj?.config?.models
+  return Array.isArray(models) ? models : []
+}
+
+function fillProviderSelect(container) {
+  const select = container.querySelector('[data-provider-select="true"]')
+  if (!select) return
+  const providers = container._providers || {}
+  const routes = providerRoutes(providers)
+  const previous = select.value
+  select.innerHTML = ''
+  if (routes.length === 0) {
+    const opt = document.createElement('option')
+    opt.value = ''
+    opt.textContent = '请先在下方添加供应商'
+    select.appendChild(opt)
+    select.value = ''
+    fillModelSelect(container)
+    return
+  }
+  for (const r of routes) {
+    const opt = document.createElement('option')
+    opt.value = r.route
+    opt.textContent = `${r.displayName} (${r.route})`
+    select.appendChild(opt)
+  }
+  select.value = routes.some(r => r.route === previous) ? previous : routes[0].route
+  fillModelSelect(container)
+}
+
+function fillModelSelect(container) {
+  const select = container.querySelector('[data-model-select="true"]')
+  if (!select) return
+  const providerSelect = container.querySelector('[data-provider-select="true"]')
+  const providers = container._providers || {}
+  const route = providerRoutes(providers).find(r => r.route === providerSelect?.value)
+  const models = route ? routeModels(route) : []
+  const previous = select.value
+  select.innerHTML = ''
+  if (models.length === 0) {
+    const opt = document.createElement('option')
+    opt.value = ''
+    opt.textContent = '该供应商尚未配置模型'
+    select.appendChild(opt)
+    select.value = ''
+    return
+  }
+  for (const m of models) {
+    const opt = document.createElement('option')
+    opt.value = m.id
+    opt.textContent = `${m.name || m.id} (${m.id})`
+    select.appendChild(opt)
+  }
+  select.value = models.some(m => m.id === previous) ? previous : models[0].id
+}
+
+function renderConfigFields(container, values, opts = {}) {
+  const { editable = false, privateCfg = {}, showSources = false } = opts
+  const activeSection = container._activeSection || 'model'
+  container.innerHTML = ''
+  container._providers = values.providers || {}
+
+  const workspace = document.createElement('div')
+  workspace.className = 'config-workspace'
+  const nav = document.createElement('nav')
+  nav.className = 'config-nav'
+  nav.setAttribute('aria-label', '配置分类')
+  const pages = document.createElement('div')
+  pages.className = 'config-pages'
+  const pageBySection = new Map()
+
+  const activateSection = (id) => {
+    container._activeSection = id
+    for (const button of nav.querySelectorAll('button')) button.classList.toggle('active', button.dataset.section === id)
+    for (const page of pages.querySelectorAll('.config-page')) page.hidden = page.dataset.section !== id
+  }
+
+  for (const section of CONFIG_SECTIONS) {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.dataset.section = section.id
+    button.textContent = section.label
+    button.onclick = () => activateSection(section.id)
+    nav.appendChild(button)
+
+    const page = document.createElement('div')
+    page.className = 'config-page'
+    page.dataset.section = section.id
+    page.innerHTML = `<div class="config-page-title">${escapeHtml(section.label)}</div><div class="config-page-desc">${escapeHtml(section.description)}</div>`
+    pages.appendChild(page)
+    pageBySection.set(section.id, page)
+  }
+
+  workspace.appendChild(nav)
+  workspace.appendChild(pages)
+  container.appendChild(workspace)
+
+  for (const def of FIELD_DEFS) {
+    const field = document.createElement('div')
+    field.className = 'field'
+    field.dataset.key = def.key
+
+    const head = document.createElement('div')
+    head.className = 'field-head'
+    head.innerHTML = `
+      <label>${escapeHtml(def.label)}</label>
+      <span class="effect-badge ${def.effect}">${def.effect === 'hot' ? '热' : '冷'}</span>
+    `
+    if (showSources) {
+      // publicOnly 字段（如 environment）永远继承公共，不显示「私有覆盖」
+      const isPrivate = !def.publicOnly && Object.prototype.hasOwnProperty.call(privateCfg, def.key)
+      head.innerHTML += `<span class="source-badge ${isPrivate ? 'private' : ''}">${isPrivate ? '私有覆盖' : '继承公共'}</span>`
+      if (editable && isPrivate) {
+        const restore = document.createElement('button')
+        restore.className = 'link'
+        restore.textContent = '恢复继承'
+        restore.type = 'button'
+        restore.onclick = () => restoreField(def.key)
+        head.appendChild(restore)
+      }
+    }
+    field.appendChild(head)
+
+    if (def.key === 'provider') {
+      const select = document.createElement('select')
+      select.dataset.providerSelect = 'true'
+      select.disabled = !editable
+      select.addEventListener('change', () => {
+        fillModelSelect(container)
+        onFieldEdited(container, def.key)
+      })
+      field.appendChild(select)
+    } else if (def.key === 'model') {
+      const select = document.createElement('select')
+      select.dataset.modelSelect = 'true'
+      select.disabled = !editable
+      select.addEventListener('change', () => onFieldEdited(container, def.key))
+      field.appendChild(select)
+    } else if (def.type === 'channels') {
+      const box = document.createElement('div')
+      box.className = 'skills-grid'
+      box.dataset.channels = 'true'
+      renderChannelCheckboxes(box, values.channels || [], editable)
+      field.appendChild(box)
+    } else if (def.type === 'skills') {
+      const box = document.createElement('div')
+      box.className = 'skills-grid'
+      box.dataset.skills = 'true'
+      renderSkillCheckboxes(box, values.skills || [], editable)
+      field.appendChild(box)
+    } else if (def.key === 'providers') {
+      renderProvidersEditor(field, container._providers, editable)
+    } else if (def.type === 'media') {
+      renderMediaEditor(field, values.media || {}, editable)
+    } else if (def.type === 'webSearch') {
+      renderWebSearchEditor(field, values.webSearch || {}, editable)
+    } else if (def.type === 'textarea') {
+      const input = document.createElement('textarea')
+      input.rows = def.key === 'agentMd' ? 4 : 3
+      input.value = values[def.key] ?? ''
+      input.disabled = !editable || (def.publicOnly && showSources)
+      input.addEventListener('input', () => onFieldEdited(container, def.key))
+      field.appendChild(input)
+    } else {
+      const input = document.createElement('input')
+      input.type = def.type
+      input.value = values[def.key] ?? ''
+      if (def.key === 'maxTokens') input.placeholder = '256000'
+      input.disabled = !editable
+      input.addEventListener('input', () => onFieldEdited(container, def.key))
+      field.appendChild(input)
+    }
+
+    pageBySection.get(def.section || 'model').appendChild(field)
+  }
+
+  fillProviderSelect(container)
+  const providerSelect = container.querySelector('[data-provider-select="true"]')
+  const modelSelect = container.querySelector('[data-model-select="true"]')
+  if (providerSelect) providerSelect.value = values.provider || providerSelect.value
+  if (modelSelect) {
+    fillModelSelect(container)
+    modelSelect.value = values.model || modelSelect.value
+  }
+  activateSection(CONFIG_SECTIONS.some(section => section.id === activeSection) ? activeSection : 'model')
+}
+
+function renderProvidersEditor(field, providers, editable) {
+  field.innerHTML = ''
+  const wrap = document.createElement('div')
+  wrap.className = 'providers-editor'
+  wrap.dataset.providersEditor = 'true'
+
+  const toolbar = document.createElement('div')
+  toolbar.className = 'providers-toolbar'
+  const addDeepseek = document.createElement('button')
+  addDeepseek.type = 'button'
+  addDeepseek.className = 'btn-secondary'
+  addDeepseek.textContent = '+ DeepSeek'
+  addDeepseek.disabled = !editable
+  addDeepseek.onclick = () => {
+    const container = field.closest('#cfg-fields, #public-fields')
+    openProviderModal('deepseek', container)
+  }
+  const addPiAi = document.createElement('button')
+  addPiAi.type = 'button'
+  addPiAi.className = 'btn-secondary'
+  addPiAi.textContent = '+ pi-ai 供应商'
+  addPiAi.disabled = !editable
+  addPiAi.onclick = () => {
+    const container = field.closest('#cfg-fields, #public-fields')
+    openProviderModal('piAi', container)
+  }
+  toolbar.appendChild(addDeepseek)
+  toolbar.appendChild(addPiAi)
+  wrap.appendChild(toolbar)
+
+  const list = document.createElement('div')
+  list.className = 'provider-card-list'
+  const routes = providerRoutes(providers)
+  if (routes.length === 0) {
+    const empty = document.createElement('div')
+    empty.className = 'hint'
+    empty.textContent = '还没有供应商，点击上方按钮添加。'
+    list.appendChild(empty)
+  } else {
+    for (const r of routes) {
+      list.appendChild(buildProviderSummaryCard(r, providers, editable))
+    }
+  }
+  wrap.appendChild(list)
+  field.appendChild(wrap)
+}
+
+function rebuildProvidersEditor(wrap, providers, editable) {
+  const field = wrap.parentElement
+  const container = field?.closest('#cfg-fields, #public-fields') || field?.parentElement
+  renderProvidersEditor(field, providers, editable)
+  if (container) {
+    container._providers = readProvidersEditor(container)
+    fillProviderSelect(container)
+    if (container.id === 'cfg-fields') onFieldEdited(container, 'providers')
+  }
+}
+
+function buildProviderSummaryCard(routeObj, providers, editable) {
+  const card = document.createElement('div')
+  card.className = 'provider-card'
+
+  const head = document.createElement('div')
+  head.className = 'provider-card-head'
+  const title = document.createElement('strong')
+  title.textContent = routeObj.kind === 'deepseek' ? 'DeepSeek 官方' : `${routeObj.displayName} (${routeObj.route})`
+  head.appendChild(title)
+
+  const actions = document.createElement('div')
+  actions.className = 'provider-card-actions'
+  const edit = document.createElement('button')
+  edit.type = 'button'
+  edit.className = 'link'
+  edit.textContent = '编辑'
+  edit.disabled = !editable
+  edit.onclick = () => {
+    const container = card.closest('#cfg-fields, #public-fields')
+    openProviderModal(routeObj.kind, container, routeObj.route, routeObj.config)
+  }
+  const del = document.createElement('button')
+  del.type = 'button'
+  del.className = 'link'
+  del.textContent = '删除'
+  del.disabled = !editable
+  del.onclick = () => {
+    if (!confirm(`删除供应商 ${routeObj.route}？`)) return
+    if (routeObj.kind === 'deepseek') {
+      delete providers.deepseek
+    } else if (providers.piAi?.providers) {
+      delete providers.piAi.providers[routeObj.route]
+    }
+    rebuildProvidersEditor(card.closest('[data-providers-editor="true"]'), providers, editable)
+  }
+  actions.appendChild(edit)
+  actions.appendChild(del)
+  head.appendChild(actions)
+  card.appendChild(head)
+
+  const meta = document.createElement('div')
+  meta.className = 'provider-card-meta'
+  const config = routeObj.config || {}
+
+  const restParts = []
+  if (config.baseURL) restParts.push(config.baseURL)
+  if (config.apiKeyEnv) restParts.push(`密钥: ${config.apiKeyEnv}`)
+  restParts.push(`模型: ${(config.models || []).length} 个`)
+
+  if (routeObj.kind === 'piAi') {
+    // 协议：在卡片上直接内联成可编辑下拉，一眼可见、可直接改（无需进弹框）
+    const protoLabel = document.createElement('span')
+    protoLabel.textContent = '协议'
+    const proto = document.createElement('select')
+    proto.className = 'provider-card-proto'
+    proto.disabled = !editable
+    for (const p of ['openai-completions', 'openai-responses', 'anthropic-messages']) {
+      const opt = document.createElement('option')
+      opt.value = p
+      opt.textContent = p
+      proto.appendChild(opt)
+    }
+    proto.value = config.api || 'openai-completions'
+    proto.addEventListener('change', () => {
+      config.api = proto.value
+      const container = card.closest('#cfg-fields, #public-fields') || card.parentElement
+      if (container) {
+        container._providers = readProvidersEditor(container)
+        fillProviderSelect(container)
+        if (container.id === 'cfg-fields') onFieldEdited(container, 'providers')
+      }
+    })
+    meta.appendChild(protoLabel)
+    meta.appendChild(proto)
+    if (restParts.length) meta.appendChild(document.createTextNode(' · ' + restParts.join(' · ')))
+  } else {
+    meta.textContent = restParts.join(' · ')
+  }
+  card.appendChild(meta)
+
+  return card
+}
+
+const PROVIDER_PRESETS = {
+  deepseek: {
+    label: 'DeepSeek 官方',
+    kind: 'deepseek',
+    route: 'deepseek-official',
+    displayName: 'DeepSeek',
+    apiKeyEnv: 'DEEPSEEK_API_KEY',
+    baseURL: 'https://api.deepseek.com',
+    api: '',
+    contextWindow: 1000000,
+    maxTokens: 256000,
+  },
+  openai: {
+    label: 'OpenAI',
+    kind: 'piAi',
+    route: 'openai',
+    displayName: 'OpenAI',
+    apiKeyEnv: 'OPENAI_API_KEY',
+    baseURL: 'https://api.openai.com/v1',
+    api: 'openai-completions',
+    contextWindow: 128000,
+    maxTokens: 16384,
+  },
+  'openai-responses': {
+    label: 'OpenAI Responses',
+    kind: 'piAi',
+    route: 'openai',
+    displayName: 'OpenAI',
+    apiKeyEnv: 'OPENAI_API_KEY',
+    baseURL: 'https://api.openai.com/v1',
+    api: 'openai-responses',
+    contextWindow: 128000,
+    maxTokens: 16384,
+  },
+  anthropic: {
+    label: 'Anthropic',
+    kind: 'piAi',
+    route: 'anthropic',
+    displayName: 'Anthropic',
+    apiKeyEnv: 'ANTHROPIC_API_KEY',
+    baseURL: 'https://api.anthropic.com/v1',
+    api: 'anthropic-messages',
+    contextWindow: 200000,
+    maxTokens: 8192,
+  },
+  custom: {
+    label: '自定义',
+    kind: 'piAi',
+    route: '',
+    displayName: '',
+    apiKeyEnv: '',
+    baseURL: '',
+    api: 'openai-completions',
+    contextWindow: '',
+    maxTokens: '',
+  },
+}
+
+function populateProviderPresets(kind) {
+  const ids = kind === 'deepseek'
+    ? ['deepseek', 'custom']
+    : ['openai', 'openai-responses', 'anthropic', 'custom']
+  $providerPreset.innerHTML = ''
+  for (const id of ids) {
+    const opt = document.createElement('option')
+    opt.value = id
+    opt.textContent = PROVIDER_PRESETS[id].label
+    $providerPreset.appendChild(opt)
+  }
+}
+
+function applyProviderPreset(id) {
+  const preset = PROVIDER_PRESETS[id]
+  if (!preset) return
+  $providerRoute.value = preset.route
+  $providerDisplay.value = preset.displayName
+  $providerApiKeyEnv.value = preset.apiKeyEnv
+  $providerApiKey.value = ''
+  $providerBaseUrl.value = preset.baseURL
+  $providerApi.value = preset.api || 'openai-completions'
+  $providerContext.value = preset.contextWindow ?? ''
+  $providerMaxTokens.value = preset.maxTokens ?? ''
+}
+
+function detectProviderPreset(kind, profile) {
+  if (kind === 'deepseek') return 'deepseek'
+  if (profile.api === 'anthropic-messages') return 'anthropic'
+  if (profile.api === 'openai-responses') return 'openai-responses'
+  if (profile.route === 'openai' || profile.api === 'openai-completions') return 'openai'
+  return 'custom'
+}
+
+function openProviderModal(kind, container, route = '', profile = {}) {
+  providerModalTarget = container
+  $providerKind.value = kind
+  $providerRouteOld.value = kind === 'deepseek' ? 'deepseek-official' : route
+  $providerRoute.value = kind === 'deepseek' ? 'deepseek-official' : route
+  $providerRoute.disabled = kind === 'deepseek'
+  $providerRouteField.style.display = kind === 'deepseek' ? 'none' : 'block'
+  $providerApiField.style.display = kind === 'deepseek' ? 'none' : 'block'
+  $providerPresetField.style.display = kind === 'deepseek' ? 'block' : 'block'
+  $providerModalTitle.textContent = kind === 'deepseek' ? 'DeepSeek 供应商' : 'pi-ai 供应商'
+
+  populateProviderPresets(kind)
+
+  const isNew = !route && !profile.api && !profile.baseURL
+  if (isNew) {
+    const presetId = kind === 'deepseek' ? 'deepseek' : 'openai'
+    $providerPreset.value = presetId
+    applyProviderPreset(presetId)
+  } else {
+    $providerPreset.value = detectProviderPreset(kind, { ...profile, route })
+    $providerDisplay.value = profile.displayName || (kind === 'deepseek' ? 'DeepSeek' : route)
+    $providerApiKeyEnv.value = profile.apiKeyEnv || (kind === 'deepseek' ? 'DEEPSEEK_API_KEY' : '')
+    $providerApiKey.value = profile.apiKey || ''
+    $providerBaseUrl.value = profile.baseURL || (kind === 'deepseek' ? 'https://api.deepseek.com' : '')
+    $providerApi.value = profile.api || 'openai-completions'
+    $providerContext.value = profile.defaultContextWindow ?? ''
+    $providerMaxTokens.value = profile.maxTokens ?? profile.defaultMaxTokens ?? ''
+  }
+
+  $providerModels.innerHTML = ''
+  const models = profile.models || []
+  for (const model of models) addProviderModelRow(model)
+
+  $providerModal.classList.add('show')
+}
+
+function addProviderModelRow(model = {}) {
+  const row = document.createElement('div')
+  row.className = 'model-row'
+  const fields = [
+    ['id', 'Model ID', 'text'],
+    ['name', 'Name', 'text'],
+    ['contextWindow', 'Context', 'number'],
+    ['maxTokens', 'Max Tokens', 'number'],
+    ['input', 'Input modalities', 'text'],
+  ]
+  for (const [key, label, type] of fields) {
+    const labelEl = document.createElement('label')
+    labelEl.className = 'provider-field'
+    labelEl.innerHTML = `<span>${escapeHtml(label)}</span>`
+    const input = document.createElement('input')
+    input.type = type
+    input.value = key === 'input' && Array.isArray(model[key]) ? model[key].join(',') : (model[key] ?? '')
+    if (key === 'id') input.placeholder = 'gpt-4o'
+    if (key === 'name') input.placeholder = 'GPT-4o'
+    if (key === 'contextWindow') input.placeholder = '128000'
+    if (key === 'maxTokens') input.placeholder = '4096'
+    if (key === 'input') input.placeholder = 'text 或 text,image'
+    labelEl.appendChild(input)
+    row.appendChild(labelEl)
+  }
+  const del = document.createElement('button')
+  del.type = 'button'
+  del.className = 'link'
+  del.textContent = '删除'
+  del.onclick = () => row.remove()
+  row.appendChild(del)
+  $providerModels.appendChild(row)
+}
+
+function readProviderModalModels() {
+  const models = []
+  for (const row of $providerModels.querySelectorAll('.model-row')) {
+    const get = (label) => {
+      const span = [...row.querySelectorAll('.provider-field span')].find(s => s.textContent === label)
+      return span ? span.parentElement.querySelector('input')?.value : ''
+    }
+    const id = get('Model ID').trim()
+    const name = get('Name').trim()
+    const contextWindow = Number(get('Context'))
+    const maxTokens = Number(get('Max Tokens'))
+    const input = get('Input modalities').split(',').map(value => value.trim()).filter(Boolean)
+    if (id) models.push({ id, name, contextWindow, maxTokens, ...(input.length ? { input } : {}) })
+  }
+  return models
+}
+
+function saveProviderModal() {
+  if (!providerModalTarget) return
+  const kind = $providerKind.value
+  const route = $providerRoute.value.trim()
+  if (kind === 'piAi' && !route) return alert('请填写 Route')
+
+  const models = readProviderModalModels()
+  const base = {
+    ...(kind === 'piAi' ? { displayName: $providerDisplay.value.trim() } : {}),
+    apiKeyEnv: $providerApiKeyEnv.value.trim(),
+    apiKey: $providerApiKey.value,
+    baseURL: $providerBaseUrl.value.trim(),
+    ...(kind === 'deepseek' ? {} : { api: $providerApi.value }),
+    models,
+  }
+  const context = Number($providerContext.value)
+  const maxTokens = Number($providerMaxTokens.value)
+  if (Number.isFinite(context) && context > 0) {
+    if (kind === 'deepseek') base.defaultContextWindow = context
+    else base.defaultContextWindow = context
+  }
+  if (Number.isFinite(maxTokens) && maxTokens > 0) {
+    if (kind === 'deepseek') base.maxTokens = maxTokens
+    else base.defaultMaxTokens = maxTokens
+  }
+
+  const providers = providerModalTarget._providers || {}
+  if (kind === 'deepseek') {
+    providers.deepseek = base
+  } else {
+    providers.piAi = providers.piAi || { providers: {} }
+    const oldRoute = $providerRouteOld.value.trim()
+    if (oldRoute && oldRoute !== route) {
+      delete providers.piAi.providers[oldRoute]
+    }
+    providers.piAi.providers[route] = base
+  }
+
+  providerModalTarget._providers = providers
+  const editor = providerModalTarget.querySelector('[data-providers-editor="true"]')
+  if (editor) {
+    const field = editor.parentElement
+    renderProvidersEditor(field, providers, true)
+  }
+  fillProviderSelect(providerModalTarget)
+  if (providerModalTarget.id === 'cfg-fields') onFieldEdited(providerModalTarget, 'providers')
+  $providerModal.classList.remove('show')
+}
+
+function closeProviderModal() {
+  $providerModal.classList.remove('show')
+}
+
+$providerAddModel.onclick = () => addProviderModelRow()
+$providerPreset.onchange = () => applyProviderPreset($providerPreset.value)
+$providerSave.onclick = saveProviderModal
+$providerCancel.onclick = closeProviderModal
+$providerModal.onclick = (e) => { if (e.target === $providerModal) closeProviderModal() }
+
+function buildProviderCard(routeObj, providers, editable) {
+  const card = document.createElement('div')
+  card.className = 'provider-card'
+  card.dataset.route = routeObj.route
+  card.dataset.kind = routeObj.kind
+
+  const head = document.createElement('div')
+  head.className = 'provider-card-head'
+  const title = document.createElement('strong')
+  title.textContent = routeObj.kind === 'deepseek' ? 'DeepSeek 官方' : `pi-ai · ${routeObj.route}`
+  head.appendChild(title)
+
+  const edit = document.createElement('button')
+  edit.type = 'button'
+  edit.className = 'link'
+  edit.textContent = '编辑'
+  edit.disabled = !editable
+  edit.onclick = () => {
+    const container = card.closest('#cfg-fields, #public-fields')
+    openProviderModal(routeObj.kind, container, routeObj.route, routeObj.config)
+  }
+  head.appendChild(edit)
+
+  const del = document.createElement('button')
+  del.type = 'button'
+  del.className = 'link'
+  del.textContent = '删除'
+  del.disabled = !editable
+  del.onclick = () => {
+    if (!confirm(`删除供应商 ${routeObj.route}？`)) return
+    if (routeObj.kind === 'deepseek') {
+      delete providers.deepseek
+    } else if (providers.piAi?.providers) {
+      delete providers.piAi.providers[routeObj.route]
+    }
+    rebuildProvidersEditor(card.closest('[data-providers-editor="true"]'), providers, editable)
+  }
+  head.appendChild(del)
+  card.appendChild(head)
+
+  const grid = document.createElement('div')
+  grid.className = 'provider-card-grid'
+
+  const addField = (label, key, type = 'text', placeholder = '') => {
+    const item = document.createElement('label')
+    item.className = 'provider-field'
+    item.innerHTML = `<span>${escapeHtml(label)}</span>`
+    const input = document.createElement('input')
+    input.type = type
+    input.value = routeObj.config?.[key] ?? ''
+    input.placeholder = placeholder
+    input.disabled = !editable
+    if (key === 'route') input.value = routeObj.route
+    input.addEventListener('input', () => {
+      if (key === 'route' && routeObj.kind !== 'deepseek') {
+        const oldRoute = card.dataset.route
+        const newRoute = input.value.trim()
+        if (newRoute && newRoute !== oldRoute && providers.piAi?.providers) {
+          const profile = providers.piAi.providers[oldRoute]
+          if (profile) {
+            delete providers.piAi.providers[oldRoute]
+            providers.piAi.providers[newRoute] = profile
+            card.dataset.route = newRoute
+          }
+        }
+      } else {
+        routeObj.config[key] = input.value
+      }
+      const container = card.closest('#cfg-fields, #public-fields') || card.parentElement
+      if (container) {
+        container._providers = readProvidersEditor(container)
+        fillProviderSelect(container)
+        if (container.id === 'cfg-fields') onFieldEdited(container, 'providers')
+      }
+    })
+    item.appendChild(input)
+    grid.appendChild(item)
+  }
+
+  const addSelectField = (label, key, options) => {
+    const item = document.createElement('label')
+    item.className = 'provider-field'
+    item.innerHTML = `<span>${escapeHtml(label)}</span>`
+    const select = document.createElement('select')
+    select.disabled = !editable
+    for (const opt of options) {
+      const o = document.createElement('option')
+      o.value = opt
+      o.textContent = opt
+      select.appendChild(o)
+    }
+    select.value = routeObj.config?.[key] || options[0]
+    select.addEventListener('change', () => {
+      routeObj.config[key] = select.value
+      const container = card.closest('#cfg-fields, #public-fields') || card.parentElement
+      if (container) {
+        container._providers = readProvidersEditor(container)
+        fillProviderSelect(container)
+        if (container.id === 'cfg-fields') onFieldEdited(container, 'providers')
+      }
+    })
+    item.appendChild(select)
+    grid.appendChild(item)
+  }
+
+  if (routeObj.kind === 'deepseek') {
+    addField('API Key Env', 'apiKeyEnv', 'text', 'DEEPSEEK_API_KEY')
+    addField('API Key', 'apiKey', 'password', 'sk-...')
+    addField('Base URL', 'baseURL', 'text', 'https://api.deepseek.com')
+    addField('Max Tokens', 'maxTokens', 'number', '256000')
+    addField('Context Window', 'defaultContextWindow', 'number', '1000000')
+  } else {
+    addField('Route', 'route', 'text', 'openai')
+    addField('Display Name', 'displayName', 'text')
+    addField('API Key Env', 'apiKeyEnv', 'text', 'OPENAI_API_KEY')
+    addField('API Key', 'apiKey', 'password', 'sk-...')
+    addField('Base URL', 'baseURL', 'text', 'https://api.openai.com/v1')
+    addSelectField('API 协议', 'api', ['openai-completions', 'openai-responses', 'anthropic-messages'])
+    addField('Context Window', 'defaultContextWindow', 'number', '262144')
+    addField('Default Max Tokens', 'defaultMaxTokens', 'number', '32768')
+  }
+  card.appendChild(grid)
+
+  const modelsTitle = document.createElement('div')
+  modelsTitle.className = 'provider-models-title'
+  modelsTitle.innerHTML = '<span>模型列表</span>'
+  const addModel = document.createElement('button')
+  addModel.type = 'button'
+  addModel.className = 'link'
+  addModel.textContent = '+ 模型'
+  addModel.disabled = !editable
+  addModel.onclick = () => {
+    const models = routeObj.config.models || (routeObj.config.models = [])
+    models.push({ id: '', name: '', contextWindow: 128000, maxTokens: 4096 })
+    renderModelsList(card, routeObj, providers, editable)
+  }
+  modelsTitle.appendChild(addModel)
+  card.appendChild(modelsTitle)
+
+  renderModelsList(card, routeObj, providers, editable)
+
+  return card
+}
+
+function renderModelsList(card, routeObj, providers, editable) {
+  let list = card.querySelector('.provider-models-list')
+  if (!list) {
+    list = document.createElement('div')
+    list.className = 'provider-models-list'
+    card.appendChild(list)
+  }
+  list.innerHTML = ''
+  const models = routeObj.config.models || []
+  for (let i = 0; i < models.length; i++) {
+    const row = document.createElement('div')
+    row.className = 'model-row'
+    const fields = [
+      ['id', 'Model ID', 'text'],
+      ['name', 'Name', 'text'],
+      ['contextWindow', 'Context', 'number'],
+      ['maxTokens', 'Max Tokens', 'number'],
+      ['input', 'Input modalities', 'text'],
+    ]
+    for (const [key, label, type] of fields) {
+      const labelEl = document.createElement('label')
+      labelEl.className = 'provider-field'
+      labelEl.innerHTML = `<span>${escapeHtml(label)}</span>`
+      const input = document.createElement('input')
+      input.type = type
+      input.value = key === 'input' && Array.isArray(models[i][key]) ? models[i][key].join(',') : (models[i][key] ?? '')
+      if (key === 'id') input.placeholder = 'gpt-4o'
+      if (key === 'name') input.placeholder = 'GPT-4o'
+      if (key === 'contextWindow') input.placeholder = '128000'
+      if (key === 'maxTokens') input.placeholder = '4096'
+      if (key === 'input') input.placeholder = 'text 或 text,image'
+      input.disabled = !editable
+      input.addEventListener('input', () => {
+        models[i][key] = key === 'input'
+          ? input.value.split(',').map(value => value.trim()).filter(Boolean)
+          : type === 'number' ? Number(input.value) : input.value
+        const container = card.closest('#cfg-fields, #public-fields') || card.parentElement
+        if (container) {
+          container._providers = readProvidersEditor(container)
+          fillProviderSelect(container)
+          if (container.id === 'cfg-fields') onFieldEdited(container, 'providers')
+        }
+      })
+      labelEl.appendChild(input)
+      row.appendChild(labelEl)
+    }
+    const del = document.createElement('button')
+    del.type = 'button'
+    del.className = 'link'
+    del.textContent = '删除'
+    del.disabled = !editable
+    del.onclick = () => {
+      models.splice(i, 1)
+      renderModelsList(card, routeObj, providers, editable)
+      const container = card.closest('#cfg-fields, #public-fields') || card.parentElement
+      if (container) {
+        container._providers = readProvidersEditor(container)
+        fillProviderSelect(container)
+        if (container.id === 'cfg-fields') onFieldEdited(container, 'providers')
+      }
+    }
+    row.appendChild(del)
+    list.appendChild(row)
+  }
+}
+
+function readProvidersEditor(container) {
+  return JSON.parse(JSON.stringify(container._providers || {}))
+}
+
+function readProviderCard(card) {
+  const cfg = {}
+  const inputs = card.querySelectorAll('.provider-card-grid input')
+  for (const input of inputs) {
+    const span = input.parentElement.querySelector('span')
+    const label = span?.textContent || ''
+    let key = ''
+    if (label.includes('API Key Env')) key = 'apiKeyEnv'
+    else if (label.includes('API Key')) key = 'apiKey'
+    else if (label.includes('Base URL')) key = 'baseURL'
+    else if (label.includes('Default Max Tokens')) key = 'defaultMaxTokens'
+    else if (label.includes('Max Tokens')) key = 'maxTokens'
+    else if (label.includes('Context Window')) key = 'defaultContextWindow'
+    else if (label.includes('Display Name')) key = 'displayName'
+    else if (label.includes('API 协议')) key = 'api'
+    else if (label.includes('Route')) key = 'route'
+    if (!key || key === 'route') continue
+    if (key === 'maxTokens' || key === 'defaultContextWindow' || key === 'defaultMaxTokens') {
+      cfg[key] = Number(input.value)
+    } else {
+      cfg[key] = input.value
+    }
+  }
+  const models = []
+  for (const row of card.querySelectorAll('.model-row')) {
+    const get = (label) => {
+      const span = [...row.querySelectorAll('.provider-field span')].find(s => s.textContent === label)
+      return span ? span.parentElement.querySelector('input')?.value : ''
+    }
+    const id = get('Model ID')
+    const name = get('Name')
+    const contextWindow = Number(get('Context'))
+    const maxTokens = Number(get('Max Tokens'))
+    const input = get('Input modalities').split(',').map(value => value.trim()).filter(Boolean)
+    if (id) {
+      models.push({ id, name, contextWindow, maxTokens, ...(input.length ? { input } : {}) })
+    }
+  }
+  if (models.length > 0) cfg.models = models
+  return cfg
+}
+
+
+function renderChannelCheckboxes(box, selected = [], editable = true) {
+  box.innerHTML = ''
+  const selectedSet = new Set((selected || []).map(c => ['ws', 'vn', 'ai-town'].includes(c) ? 'stage' : ['webui', 'web-ui'].includes(c) ? 'http' : c))
+  for (const ch of CHANNEL_OPTIONS) {
+    const label = document.createElement('label')
+    const checkbox = document.createElement('input')
+    checkbox.type = 'checkbox'
+    checkbox.value = ch.id
+    checkbox.checked = selectedSet.has(ch.id)
+    checkbox.disabled = !editable
+    checkbox.addEventListener('change', () => onFieldEdited(box.closest('#cfg-fields') || box.closest('#public-fields'), 'channels'))
+    label.appendChild(checkbox)
+    label.appendChild(document.createTextNode(ch.label))
+    box.appendChild(label)
+  }
+}
+
+function renderSkillCheckboxes(box, selected = [], editable = true) {
+  box.innerHTML = ''
+  const selectedSet = new Set(selected || [])
+  if (skillLibrary.length === 0) {
+    box.innerHTML = '<div style="color:#888;font-size:12px;padding:6px 0">技能库为空，请先在右上角「技能库」中添加技能。</div>'
+    return
+  }
+  for (const skill of skillLibrary) {
+    const label = document.createElement('label')
+    const checkbox = document.createElement('input')
+    checkbox.type = 'checkbox'
+    checkbox.value = skill.name
+    checkbox.checked = selectedSet.has(skill.name)
+    checkbox.disabled = !editable
+    checkbox.addEventListener('change', () => onFieldEdited(box.closest('#cfg-fields') || box.closest('#public-fields'), 'skills'))
+    label.appendChild(checkbox)
+    label.appendChild(document.createTextNode(skill.name))
+    box.appendChild(label)
+  }
+}
+
+function renderMediaEditor(field, media, editable) {
+  field.innerHTML = ''
+  const wrap = document.createElement('div')
+  wrap.className = 'media-editor'
+  wrap.dataset.mediaEditor = 'true'
+  const container = () => field.closest('#cfg-fields') || field.closest('#public-fields')
+  const mark = () => onFieldEdited(container(), 'media')
+
+  const capabilities = [
+    { id: 'imageGen', title: '图片生成（现有 Agent 工具）' },
+  ]
+  for (const cap of capabilities) {
+    const value = media?.[cap.id] || {}
+    const providers = value.providers || {}
+    const capBox = document.createElement('div')
+    capBox.className = 'media-capability'
+    capBox.dataset.mediaCapability = cap.id
+    const capTitle = document.createElement('div')
+    capTitle.className = 'media-cap-title'
+    capTitle.textContent = cap.title
+    capBox.appendChild(capTitle)
+
+    const select = document.createElement('select')
+    select.dataset.mediaProvider = cap.id
+    select.disabled = !editable
+    const noneOpt = document.createElement('option')
+    noneOpt.value = ''
+    noneOpt.textContent = '（未选择厂家）'
+    select.appendChild(noneOpt)
+    for (const v of MEDIA_VENDORS[cap.id]) {
+      const opt = document.createElement('option')
+      opt.value = v.id
+      opt.textContent = v.label
+      select.appendChild(opt)
+    }
+    select.value = value.provider || ''
+    select.addEventListener('change', mark)
+    capBox.appendChild(select)
+
+    for (const v of MEDIA_VENDORS[cap.id]) {
+      const vbox = document.createElement('div')
+      vbox.className = 'media-vendor'
+      vbox.dataset.mediaVendor = v.id
+      const vtitle = document.createElement('div')
+      vtitle.className = 'media-vendor-title'
+      vtitle.textContent = v.label
+      vbox.appendChild(vtitle)
+      const profile = providers[v.id] || {}
+      for (const f of MEDIA_VENDOR_FIELDS[v.id] || []) {
+        const label = document.createElement('label')
+        label.className = 'media-vendor-field'
+        const span = document.createElement('span')
+        span.textContent = f.label
+        const input = document.createElement('input')
+        input.type = f.type
+        input.value = profile[f.key] ?? ''
+        input.placeholder = f.key
+        input.dataset.mediaField = f.key
+        input.disabled = !editable
+        input.addEventListener('input', mark)
+        label.append(span, input)
+        vbox.appendChild(label)
+      }
+      capBox.appendChild(vbox)
+    }
+    wrap.appendChild(capBox)
+  }
+  field.appendChild(wrap)
+}
+
+function renderWebSearchEditor(field, config, editable) {
+  const hint = document.createElement('div')
+  hint.className = 'hint'
+  hint.textContent = 'DeepSeek 原生联网搜索。未配置独立 Key 时复用 DeepSeek 供应商的凭据；填写独立 Key 时默认使用 DEEPSEEK_SEARCH_API_KEY。搜索通过单独的模型请求执行，会产生搜索模型调用费用。留空地址或模型使用下方默认值；修改保存后热生效。'
+  field.appendChild(hint)
+  const fields = [
+    ['apiKey', '独立搜索 API Key（可选）', 'password', '留空复用 DeepSeek 凭据'],
+    ['apiKeyEnv', '凭据引用（可选）', 'text', '自动选择 DeepSeek / 独立搜索凭据'],
+    ['baseURL', '搜索接口地址（Anthropic 兼容基址）', 'text', 'https://api.deepseek.com/anthropic/v1'],
+    ['model', '搜索模型', 'text', 'deepseek-v4-flash'],
+    ['maxTokens', '搜索模型最大输出 Token', 'number', '4096'],
+    ['maxUses', '单次请求最多搜索次数', 'number', '5'],
+  ]
+  for (const [key, title, type, placeholder] of fields) {
+    const label = document.createElement('label')
+    label.className = 'media-vendor-field'
+    const text = document.createElement('span')
+    text.textContent = title
+    const input = document.createElement('input')
+    input.dataset.searchField = key
+    input.type = type
+    input.placeholder = placeholder
+    input.value = config[key] ?? ''
+    input.disabled = !editable
+    if (type === 'number') { input.min = '1'; input.step = '1' }
+    input.addEventListener('input', () => onFieldEdited(field.closest('#cfg-fields, #public-fields'), 'webSearch'))
+    label.append(text, input)
+    field.appendChild(label)
+  }
+}
+
+function readWebSearchEditor(container) {
+  const result = {}
+  for (const input of container.querySelectorAll('[data-search-field]')) {
+    const key = input.dataset.searchField
+    const value = key === 'apiKey' ? input.value : input.value.trim()
+    if (!value) continue
+    if (input.type === 'number') {
+      const number = Number(value)
+      if (!Number.isSafeInteger(number) || number <= 0) throw new Error(`${key} 必须是正整数`)
+      result[key] = number
+    } else result[key] = value
+  }
+  return result
+}
+
+function readMediaEditor(container) {
+  const editor = container.querySelector('[data-media-editor="true"]')
+  if (!editor) return undefined
+  const result = {}
+  for (const [capId, vendors] of Object.entries(MEDIA_VENDORS)) {
+    const capBox = editor.querySelector(`[data-media-capability="${capId}"]`)
+    if (!capBox) continue
+    const provider = capBox.querySelector(`[data-media-provider="${capId}"]`)?.value || ''
+    const providers = {}
+    for (const v of vendors) {
+      const vbox = capBox.querySelector(`[data-media-vendor="${v.id}"]`)
+      if (!vbox) continue
+      const profile = {}
+      for (const f of MEDIA_VENDOR_FIELDS[v.id] || []) {
+        const val = (vbox.querySelector(`[data-media-field="${f.key}"]`)?.value || '').trim()
+        if (val) profile[f.key] = val
+      }
+      if (Object.keys(profile).length > 0) providers[v.id] = profile
+    }
+    const capability = {}
+    if (provider) capability.provider = provider
+    if (Object.keys(providers).length > 0) capability.providers = providers
+    if (Object.keys(capability).length > 0) result[capId] = capability
+  }
+  return Object.keys(result).length > 0 ? result : undefined
+}
+
+function readFieldInputs(container) {
+  const patch = {}
+  for (const def of FIELD_DEFS) {
+    if (def.key === 'provider') {
+      patch.provider = container.querySelector('[data-provider-select="true"]')?.value || ''
+      continue
+    }
+    if (def.key === 'model') {
+      patch.model = container.querySelector('[data-model-select="true"]')?.value || ''
+      continue
+    }
+    if (def.key === 'providers') {
+      patch.providers = readProvidersEditor(container)
+      continue
+    }
+    if (def.key === 'media') {
+      patch.media = readMediaEditor(container)
+      continue
+    }
+    if (def.key === 'webSearch') {
+      patch.webSearch = readWebSearchEditor(container)
+      continue
+    }
+    if (def.type === 'skills') {
+      const box = container.querySelector('[data-skills="true"]')
+      patch.skills = [...box.querySelectorAll('input[type="checkbox"]:checked')].map(el => el.value)
+      continue
+    }
+    if (def.type === 'channels') {
+      const box = container.querySelector('[data-channels="true"]')
+      patch.channels = [...box.querySelectorAll('input[type="checkbox"]:checked')].map(el => el.value)
+      continue
+    }
+    const input = container.querySelector(`.field[data-key="${def.key}"] input, .field[data-key="${def.key}"] textarea`)
+    if (def.key === 'maxTokens') {
+      const value = fieldValue('number', input)
+      if (value === null) throw new Error('Max Tokens 必须是正整数')
+      patch.maxTokens = value
+    } else {
+      patch[def.key] = input.value
+    }
+  }
+  return patch
+}
+
+// ── 助手配置 ────────────────────────────────────────────────────────────────
+async function loadSkills() {
+  try { skillLibrary = await api('/api/skills') } catch (err) { console.warn('技能库加载失败:', err) }
+}
+
+async function openAssistantConfig(a) {
+  $cfgOverlay.classList.add('show')
+  $cfgTitle.textContent = `· ${a.name}`
+  $cfgSave.disabled = true
+  $cfgFields.innerHTML = '<div class="hint">加载中...</div>'
+
+  const [resolved, privateCfg, publicCfg] = await Promise.all([
+    api(`/api/config/resolve?sessionId=${encodeURIComponent(a.sessionId)}`),
+    api(`/api/assistants/${encodeURIComponent(a.id)}/config`),
+    api('/api/config'),
+  ])
+  await loadSkills()
+
+  // /api/config/resolve 返回的是 { revision, config } 信封，这里只要 config
+  // （否则 effective.persona 会是 undefined，覆盖的内容显示不出来）
+  const effective = resolved?.config ?? resolved
+
+  const hasPrivate = Object.keys(privateCfg || {}).length > 0
+  assistantCfgState = {
+    assistant: a,
+    effective,
+    privateCfg: privateCfg || {},
+    publicCfg: publicCfg || {},
+    dirty: new Set(),
+    mode: hasPrivate ? 'override' : 'inherit',
+  }
+
+  renderAssistantConfigForm()
+}
+
+function renderAssistantConfigForm() {
+  const state = assistantCfgState
+  if (!state) return
+  const editable = state.mode === 'override'
+  const pending = state.assistant.pendingRestart
+
+  $cfgMode.value = state.mode
+  $cfgPendingBanner.style.display = pending ? 'flex' : 'none'
+  $cfgPendingBadge.innerHTML = pending ? '<span class="pending-badge">待重启</span>' : ''
+  $cfgHint.textContent = editable
+    ? '当前为私有覆盖模式。只保存修改过的字段；未修改字段继续继承公共配置。'
+    : '当前为继承公共模式，表单只读展示有效配置。切换到「私有覆盖」后可编辑。'
+
+  renderConfigFields($cfgFields, state.effective, {
+    editable,
+    privateCfg: state.privateCfg,
+    showSources: true,
+  })
+  updateCfgSaveButton()
+}
+
+function updateCfgSaveButton() {
+  const state = assistantCfgState
+  $cfgSave.disabled = !state || state.mode !== 'override' || state.dirty.size === 0
+}
+
+function onFieldEdited(container, key) {
+  if (container.id !== 'cfg-fields') return
+  if (assistantCfgState) {
+    assistantCfgState.dirty.add(key)
+    updateCfgSaveButton()
+  }
+}
+
+async function restoreField(key) {
+  const state = assistantCfgState
+  if (!state) return
+  const patch = { [key]: null }
+  await saveAssistantConfig(patch)
+}
+
+async function saveAssistantConfig(patch) {
+  const state = assistantCfgState
+  if (!state) return
+  try {
+    if (!patch) {
+      patch = {}
+      for (const key of state.dirty) {
+        if (key === 'skills') {
+          const box = $cfgFields.querySelector('[data-skills="true"]')
+          patch.skills = [...box.querySelectorAll('input[type="checkbox"]:checked')].map(el => el.value)
+          continue
+        }
+        if (key === 'channels') {
+          const box = $cfgFields.querySelector('[data-channels="true"]')
+          patch.channels = [...box.querySelectorAll('input[type="checkbox"]:checked')].map(el => el.value)
+          continue
+        }
+        if (key === 'provider') {
+          patch.provider = $cfgFields.querySelector('[data-provider-select="true"]')?.value || ''
+          continue
+        }
+        if (key === 'model') {
+          patch.model = $cfgFields.querySelector('[data-model-select="true"]')?.value || ''
+          continue
+        }
+        if (key === 'providers') {
+          patch.providers = readProvidersEditor($cfgFields)
+          continue
+        }
+        if (key === 'media') {
+          patch.media = readMediaEditor($cfgFields)
+          continue
+        }
+        if (key === 'webSearch') {
+          patch.webSearch = readWebSearchEditor($cfgFields)
+          continue
+        }
+        const input = $cfgFields.querySelector(`.field[data-key="${key}"] input, .field[data-key="${key}"] textarea`)
+        if (!input) continue
+        if (key === 'maxTokens') {
+          patch.maxTokens = fieldValue('number', input)
+          if (patch.maxTokens === null) throw new Error('Max Tokens 必须是正整数')
+        } else {
+          patch[key] = input.value
+        }
+      }
+    }
+
+    if (Object.keys(patch).length === 0) return
+    const cold = coldKeys(patch)
+    if (cold.length > 0 && !confirm(`修改了冷字段（${cold.join(', ')}），保存后需重启助手才会生效。是否继续？`)) return
+
+    $cfgSave.disabled = true
+    const result = await api(`/api/assistants/${encodeURIComponent(state.assistant.id)}/config`, {
+      method: 'PUT',
+      body: JSON.stringify(patch),
+    })
+    await refresh()
+
+    state.privateCfg = result.private || {}
+    state.effective = result.resolved || state.effective
+    state.dirty.clear()
+    // 热字段保存不会清除控制台里已经存在的「待重启」标记
+    const refreshed = assistants.find(item => item.id === state.assistant.id)
+    state.assistant.pendingRestart = result.pendingRestart
+      ? true
+      : (refreshed?.pendingRestart ?? false)
+    renderAssistantConfigForm()
+  } catch (err) {
+    alert('保存配置失败: ' + err.message)
+    $cfgSave.disabled = false
+  }
+}
+
+async function restartAssistant() {
+  const state = assistantCfgState
+  if (!state) return
+  if (!confirm(`确定重启「${state.assistant.name}」吗？会话历史会保留，冷字段将生效。`)) return
+  $cfgRestart.disabled = true
+  try {
+    await api(`/api/assistants/${encodeURIComponent(state.assistant.id)}/restart`, { method: 'POST' })
+    $cfgRestart.disabled = false
+    closeOverlay($cfgOverlay)
+    await refresh()
+    // 等新进程上报
+    await new Promise(r => setTimeout(r, 2500))
+    await refresh()
+  } catch (err) {
+    alert('重启失败: ' + err.message)
+    $cfgRestart.disabled = false
+  }
+}
+
+// ── 公共配置 ────────────────────────────────────────────────────────────────
+async function openPublicConfig() {
+  $publicOverlay.classList.add('show')
+  $publicFields.innerHTML = '<div class="hint">加载中...</div>'
+  const [publicCfg] = await Promise.all([api('/api/config'), loadSkills()])
+  renderConfigFields($publicFields, publicCfg || {}, { editable: true })
+}
+
+async function savePublicConfig() {
+  try {
+    const patch = readFieldInputs($publicFields)
+    const cold = coldKeys(patch)
+    if (cold.length > 0 && !confirm(`修改了公共冷字段（${cold.join(', ')}），所有助手都需手动重启才会生效。是否继续？`)) return
+    $publicSave.disabled = true
+    const result = await api('/api/config', { method: 'PUT', body: JSON.stringify(patch) })
+    $publicSave.disabled = false
+    closeOverlay($publicOverlay)
+    await refresh()
+    if (result.pendingRestart?.length) alert(`已保存。以下助手需重启: ${result.pendingRestart.join(', ')}`)
+  } catch (err) {
+    alert('保存公共配置失败: ' + err.message)
+    $publicSave.disabled = false
+  }
+}
+
+// ── 技能库 ──────────────────────────────────────────────────────────────────
+async function openSkills() {
+  $skillsOverlay.classList.add('show')
+  await refreshSkillList()
+  clearSkillForm()
+}
+
+async function refreshSkillList() {
+  await loadSkills()
+  $skillList.innerHTML = ''
+  if (skillLibrary.length === 0) {
+    $skillList.innerHTML = '<div style="padding:14px;color:#888;font-size:13px">技能库为空</div>'
+    return
+  }
+  for (const skill of skillLibrary) {
+    const item = document.createElement('div')
+    item.className = 'skill-item'
+    item.innerHTML = `
+      <div class="skill-name">${escapeHtml(skill.name)}</div>
+      <div class="skill-desc">${escapeHtml(skill.description || '无描述')}</div>
+    `
+    item.onclick = () => fillSkillForm(skill)
+    $skillList.appendChild(item)
+  }
+}
+
+function fillSkillForm(skill) {
+  $skillName.value = skill.name
+  $skillDesc.value = skill.description || ''
+  $skillContent.value = skill.content || ''
+}
+
+function clearSkillForm() {
+  $skillName.value = ''
+  $skillDesc.value = ''
+  $skillContent.value = ''
+}
+
+async function saveSkill() {
+  const name = $skillName.value.trim()
+  const content = $skillContent.value.trim()
+  if (!name || !content) return alert('技能名和正文不能为空')
+  try {
+    await api(`/api/skills/${encodeURIComponent(name)}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        name,
+        description: $skillDesc.value.trim(),
+        content: $skillContent.value,
+      }),
+    })
+    await refreshSkillList()
+  } catch (err) {
+    alert('保存技能失败: ' + err.message)
+  }
+}
+
+// ── 定时任务 ────────────────────────────────────────────────────────────────
+function taskDate(value) {
+  if (value === null || value === undefined || value === '') return null
+  const date = typeof value === 'number' || /^\d+$/.test(String(value))
+    ? new Date(Number(value) < 1e12 ? Number(value) * 1000 : Number(value))
+    : new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+function formatTaskDate(value) {
+  const date = taskDate(value)
+  return date ? date.toLocaleString('zh-CN', { hour12: false }) : '—'
+}
+
+function localDateTimeValue(value) {
+  const date = taskDate(value)
+  if (!date) return ''
+  const offset = date.getTimezoneOffset() * 60000
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16)
+}
+
+function scheduleLabel(schedule = {}) {
+  if (schedule.kind === 'once') return `单次：${formatTaskDate(schedule.at)}`
+  if (schedule.kind === 'interval') return `每 ${schedule.everySeconds || '—'} 秒${schedule.startAt ? `，开始于 ${formatTaskDate(schedule.startAt)}` : ''}`
+  if (schedule.kind === 'daily') return `每天 ${schedule.time || '—'}（${schedule.timezone || 'Asia/Shanghai'}）`
+  return '未设置调度'
+}
+
+function taskStatus(task) {
+  if (task.completedAt) return { text: '单次已投递', className: '' }
+  if (!task.enabled) return { text: '已暂停', className: 'paused' }
+  if (task.lastOutcome === 'retrying') return { text: '重试中', className: 'error' }
+  if (task.lastError) return { text: '有错误', className: 'error' }
+  return { text: task.lastOutcome === 'delivered' ? '已投递' : '已启用', className: '' }
+}
+
+function renderScheduledTasks() {
+  $scheduledTasksList.textContent = ''
+  if (scheduledTasks.length === 0) {
+    const empty = document.createElement('div')
+    empty.className = 'empty'
+    empty.textContent = '暂无定时任务'
+    $scheduledTasksList.appendChild(empty)
+    return
+  }
+  for (const task of scheduledTasks) {
+    const item = document.createElement('div')
+    item.className = 'task-item'
+    const head = document.createElement('div')
+    head.className = 'task-item-head'
+    const main = document.createElement('div')
+    main.className = 'task-item-main'
+    const title = document.createElement('div')
+    title.className = 'task-title'
+    title.textContent = task.title || '未命名任务'
+    const status = taskStatus(task)
+    const badge = document.createElement('span')
+    badge.className = `task-status ${status.className}`
+    badge.textContent = status.text
+    title.appendChild(badge)
+    const meta = document.createElement('div')
+    meta.className = 'task-meta'
+    meta.textContent = `创建人：${task.creatorName || '未知助手'} · ${task.ownerSessionId || '—'}`
+    const detail = document.createElement('div')
+    detail.className = 'task-detail'
+    const outcome = { pending: '等待投递', retrying: '等待重试', delivered: '已交给助手' }[task.lastOutcome] || '—'
+    detail.textContent = `${scheduleLabel(task.schedule)} · 下次：${formatTaskDate(task.nextRunAt)} · 最近结果：${outcome}`
+    if (task.lastError) detail.textContent += ` · 错误：${task.lastError}`
+    const prompt = document.createElement('div')
+    prompt.className = 'task-prompt'
+    prompt.textContent = task.prompt || ''
+    main.append(title, meta, detail, prompt)
+    const actions = document.createElement('div')
+    actions.className = 'task-actions'
+    const makeButton = (text, action, className = 'btn-secondary') => {
+      const button = document.createElement('button')
+      button.className = className
+      button.textContent = text
+      button.dataset.action = action
+      button.onclick = () => handleScheduledTaskAction(task, button)
+      return button
+    }
+    actions.append(
+      makeButton('编辑', 'edit'),
+      makeButton(task.enabled ? '暂停' : '恢复', 'toggle'),
+      makeButton('立即唤醒', 'run'),
+      makeButton('运行历史', 'runs'),
+      makeButton('删除', 'delete', 'btn-danger'),
+    )
+    head.append(main, actions)
+    item.appendChild(head)
+    $scheduledTasksList.appendChild(item)
+  }
+}
+
+async function loadScheduledTasks() {
+  try {
+    const result = await api('/api/scheduled-tasks')
+    scheduledTasks = Array.isArray(result?.items) ? result.items : (Array.isArray(result?.tasks) ? result.tasks : [])
+    renderScheduledTasks()
+  } catch (err) {
+    $scheduledTasksList.textContent = ''
+    const empty = document.createElement('div')
+    empty.className = 'empty'
+    empty.textContent = `加载定时任务失败：${err.message}`
+    $scheduledTasksList.appendChild(empty)
+  }
+}
+
+function stopScheduledTasksPolling() {
+  if (scheduledTasksTimer) clearInterval(scheduledTasksTimer)
+  scheduledTasksTimer = null
+}
+
+async function openScheduledTasks() {
+  $scheduledTasksOverlay.classList.add('show')
+  await loadScheduledTasks()
+  stopScheduledTasksPolling()
+  scheduledTasksTimer = setInterval(loadScheduledTasks, 4000)
+}
+
+function closeScheduledTasks() {
+  closeOverlay($scheduledTasksOverlay)
+  stopScheduledTasksPolling()
+}
+
+function renderScheduleEditor(schedule = {}) {
+  const kind = $scheduledTaskKind.value
+  $scheduledTaskScheduleFields.textContent = ''
+  const appendField = (label, id, type, value, extraClass = '') => {
+    const field = document.createElement('div')
+    field.className = `field ${extraClass}`
+    const head = document.createElement('div')
+    head.className = 'field-head'
+    const labelEl = document.createElement('label')
+    labelEl.htmlFor = id
+    labelEl.textContent = label
+    head.appendChild(labelEl)
+    const input = document.createElement('input')
+    input.id = id
+    input.type = type
+    input.value = value || ''
+    field.append(head, input)
+    $scheduledTaskScheduleFields.appendChild(field)
+  }
+  if (kind === 'once') appendField('执行时间', 'scheduled-task-at', 'datetime-local', localDateTimeValue(schedule.at), 'full')
+  if (kind === 'interval') {
+    appendField('间隔（秒，至少 60）', 'scheduled-task-every', 'number', schedule.everySeconds || 3600)
+    appendField('开始时间（可选）', 'scheduled-task-start-at', 'datetime-local', localDateTimeValue(schedule.startAt))
+  }
+  if (kind === 'daily') {
+    appendField('执行时间', 'scheduled-task-time', 'time', schedule.time || '09:00')
+    appendField('时区', 'scheduled-task-timezone', 'text', schedule.timezone || 'Asia/Shanghai')
+  }
+}
+
+function populateTaskCreator(task) {
+  $scheduledTaskCreator.textContent = ''
+  const ownerId = task?.ownerSessionId || ''
+  for (const assistant of assistants) {
+    const sessionId = assistant.sessionId || assistant.id
+    if (!sessionId) continue
+    const option = document.createElement('option')
+    option.value = sessionId
+    option.textContent = `${assistant.name || '未命名助手'} · ${sessionId}${assistant.status === 'offline' ? '（离线）' : ''}`
+    $scheduledTaskCreator.appendChild(option)
+  }
+  if (ownerId) $scheduledTaskCreator.value = ownerId
+  $scheduledTaskCreator.disabled = Boolean(task)
+  $scheduledTaskCreatorHint.textContent = task
+    ? `创建人不可修改：${task.creatorName || '未知助手'} · ${ownerId}`
+    : '可选择离线助手创建任务，任务会在其会话可用时投递。'
+}
+
+function openScheduledTaskEditor(task = null) {
+  scheduledTaskEditingId = task?.id || null
+  $scheduledTaskEditorTitle.textContent = task ? '编辑定时任务' : '新建定时任务'
+  populateTaskCreator(task)
+  $scheduledTaskTitle.value = task?.title || ''
+  $scheduledTaskPrompt.value = task?.prompt || ''
+  $scheduledTaskKind.value = task?.schedule?.kind || 'once'
+  renderScheduleEditor(task?.schedule || {})
+  $scheduledTaskEditorOverlay.classList.add('show')
+  if (!task && $scheduledTaskCreator.options.length === 0) $scheduledTaskCreatorHint.textContent = '当前没有可选助手；请先创建助手。'
+}
+
+function readTaskSchedule() {
+  const kind = $scheduledTaskKind.value
+  if (kind === 'once') {
+    const at = document.getElementById('scheduled-task-at')?.value
+    if (!at) throw new Error('请选择执行时间')
+    return { kind, at: new Date(at).toISOString() }
+  }
+  if (kind === 'interval') {
+    const everySeconds = Number(document.getElementById('scheduled-task-every')?.value)
+    if (!Number.isInteger(everySeconds) || everySeconds < 60) throw new Error('间隔必须是不少于 60 秒的整数')
+    const startAt = document.getElementById('scheduled-task-start-at')?.value
+    return { kind, everySeconds, ...(startAt ? { startAt: new Date(startAt).toISOString() } : {}) }
+  }
+  const time = document.getElementById('scheduled-task-time')?.value
+  const timezone = document.getElementById('scheduled-task-timezone')?.value.trim()
+  if (!/^\d{2}:\d{2}$/.test(time || '')) throw new Error('请输入 HH:mm 格式的每日时间')
+  if (!timezone) throw new Error('请输入时区')
+  return { kind: 'daily', time, timezone }
+}
+
+async function saveScheduledTask() {
+  const title = $scheduledTaskTitle.value.trim()
+  const prompt = $scheduledTaskPrompt.value.trim()
+  if (!title || !prompt) return alert('标题和提示词不能为空')
+  if (!scheduledTaskEditingId && !$scheduledTaskCreator.value) return alert('请选择创建人助手')
+  let schedule
+  try { schedule = readTaskSchedule() } catch (err) { return alert(err.message) }
+  $scheduledTaskEditorSave.disabled = true
+  try {
+    if (scheduledTaskEditingId) {
+      await api(`/api/scheduled-tasks/${encodeURIComponent(scheduledTaskEditingId)}`, { method: 'PATCH', body: JSON.stringify({ title, prompt, schedule }) })
+    } else {
+      await api('/api/scheduled-tasks', { method: 'POST', body: JSON.stringify({ creatorSessionId: $scheduledTaskCreator.value, title, prompt, schedule }) })
+    }
+    closeOverlay($scheduledTaskEditorOverlay)
+    await loadScheduledTasks()
+  } catch (err) {
+    alert(`保存定时任务失败：${err.message}`)
+  } finally {
+    $scheduledTaskEditorSave.disabled = false
+  }
+}
+
+async function handleScheduledTaskAction(task, button) {
+  button.disabled = true
+  try {
+    if (button.dataset.action === 'edit') return openScheduledTaskEditor(task)
+    if (button.dataset.action === 'toggle') {
+      await api(`/api/scheduled-tasks/${encodeURIComponent(task.id)}`, { method: 'PATCH', body: JSON.stringify({ enabled: !task.enabled }) })
+    } else if (button.dataset.action === 'run') {
+      const run = await api(`/api/scheduled-tasks/${encodeURIComponent(task.id)}/run`, { method: 'POST' })
+      alert(run.status === 'delivered'
+        ? '任务已交给创建人助手，等待处理。'
+        : '唤醒请求已保存，等待创建人助手上线或重试投递。')
+    } else if (button.dataset.action === 'runs') {
+      await openScheduledTaskRuns(task)
+      return
+    } else if (button.dataset.action === 'delete') {
+      if (!confirm(`确定删除「${task.title}」吗？此操作不可恢复。`)) return
+      await api(`/api/scheduled-tasks/${encodeURIComponent(task.id)}`, { method: 'DELETE' })
+    }
+    await loadScheduledTasks()
+  } catch (err) {
+    alert(`操作失败：${err.message}`)
+  } finally {
+    button.disabled = false
+  }
+}
+
+async function openScheduledTaskRuns(task) {
+  $scheduledTaskRunsTitle.textContent = `运行历史 · ${task.title}`
+  $scheduledTaskRunsList.textContent = '加载中...'
+  $scheduledTaskRunsOverlay.classList.add('show')
+  try {
+    const result = await api(`/api/scheduled-tasks/${encodeURIComponent(task.id)}/runs`)
+    const runs = Array.isArray(result?.items) ? result.items : (Array.isArray(result?.runs) ? result.runs : [])
+    $scheduledTaskRunsList.textContent = ''
+    if (runs.length === 0) {
+      const empty = document.createElement('div')
+      empty.className = 'empty'
+      empty.textContent = '暂无运行记录'
+      $scheduledTaskRunsList.appendChild(empty)
+    }
+    for (const run of runs) {
+      const item = document.createElement('div')
+      item.className = 'run-item'
+      const line = document.createElement('div')
+      line.textContent = `${run.trigger === 'manual' ? '手动唤醒' : '定时触发'} · ${run.status || '—'} · 计划 ${formatTaskDate(run.scheduledAt)}`
+      const detail = document.createElement('div')
+      detail.className = 'task-detail'
+      detail.textContent = `尝试 ${run.attemptCount ?? 0} 次 · 最近尝试 ${formatTaskDate(run.lastAttemptAt)} · 投递 ${formatTaskDate(run.deliveredAt)}`
+      if (run.lastError) detail.textContent += ` · 错误：${run.lastError}`
+      item.append(line, detail)
+      $scheduledTaskRunsList.appendChild(item)
+    }
+  } catch (err) {
+    $scheduledTaskRunsList.textContent = `加载运行历史失败：${err.message}`
+  }
+}
+
+// ── 创建 / 停止 ─────────────────────────────────────────────────────────────
+async function createAssistant() {
+  $dlgConfirm.disabled = true
+  try {
+    const body = { name: $dlgName.value.trim() }
+    if ($dlgModel.value.trim()) body.model = $dlgModel.value.trim()
+    if ($dlgProvider.value.trim()) body.provider = $dlgProvider.value.trim()
+    if ($dlgPersona.value.trim()) body.persona = $dlgPersona.value.trim()
+
+    await api('/api/assistants/spawn', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+    closeOverlay($createOverlay)
+    await refresh()
+    // 等助手启动并上报
+    setTimeout(refresh, 2500)
+  } catch (err) {
+    alert('创建失败: ' + err.message)
+  } finally {
+    $dlgConfirm.disabled = false
+  }
+}
+
+async function stopAssistant(a) {
+  if (!confirm(`确定停止「${a.name}」吗？会话历史会保留，可随时重新拉起。`)) return
+  try {
+    await api(`/api/assistants/${encodeURIComponent(a.id)}/stop`, { method: 'POST' })
+    await refresh()
+  } catch (err) {
+    alert(err.message)
+  }
+}
+
+async function startAssistant(a) {
+  try {
+    await api(`/api/assistants/${encodeURIComponent(a.id)}/restart`, { method: 'POST' })
+    await refresh()
+  } catch (err) {
+    alert(err.message)
+  }
+}
+
+// ── 通用 overlay ─────────────────────────────────────────────────────────────
+function closeOverlay(overlay) { overlay.classList.remove('show') }
+
+// ── 事件绑定 ─────────────────────────────────────────────────────────────────
+$btnCreate.onclick = () => { $createOverlay.classList.add('show'); $dlgName.focus() }
+$dlgCancel.onclick = () => closeOverlay($createOverlay)
+$dlgConfirm.onclick = createAssistant
+$createOverlay.onclick = (e) => { if (e.target === $createOverlay) closeOverlay($createOverlay) }
+
+$btnPublic.onclick = openPublicConfig
+$publicClose.onclick = () => closeOverlay($publicOverlay)
+$publicSave.onclick = savePublicConfig
+$publicOverlay.onclick = (e) => { if (e.target === $publicOverlay) closeOverlay($publicOverlay) }
+
+$btnScheduledTasks.onclick = openScheduledTasks
+$scheduledTasksRefresh.onclick = loadScheduledTasks
+$scheduledTasksCreate.onclick = () => openScheduledTaskEditor()
+$scheduledTasksClose.onclick = closeScheduledTasks
+$scheduledTasksOverlay.onclick = (e) => { if (e.target === $scheduledTasksOverlay) closeScheduledTasks() }
+$scheduledTaskKind.onchange = () => renderScheduleEditor()
+$scheduledTaskEditorCancel.onclick = () => closeOverlay($scheduledTaskEditorOverlay)
+$scheduledTaskEditorSave.onclick = saveScheduledTask
+$scheduledTaskEditorOverlay.onclick = (e) => { if (e.target === $scheduledTaskEditorOverlay) closeOverlay($scheduledTaskEditorOverlay) }
+$scheduledTaskRunsClose.onclick = () => closeOverlay($scheduledTaskRunsOverlay)
+$scheduledTaskRunsOverlay.onclick = (e) => { if (e.target === $scheduledTaskRunsOverlay) closeOverlay($scheduledTaskRunsOverlay) }
+
+$cfgClose.onclick = () => closeOverlay($cfgOverlay)
+$cfgSave.onclick = () => saveAssistantConfig(null)
+$cfgRestart.onclick = restartAssistant
+$cfgRefresh.onclick = async () => { await refresh(); if (assistantCfgState) assistantCfgState.assistant = assistants.find(a => a.id === assistantCfgState.assistant.id) || assistantCfgState.assistant; renderAssistantConfigForm() }
+$cfgMode.onchange = () => {
+  if (assistantCfgState) {
+    assistantCfgState.mode = $cfgMode.value
+    renderAssistantConfigForm()
+  }
+}
+$cfgOverlay.onclick = (e) => { if (e.target === $cfgOverlay) closeOverlay($cfgOverlay) }
+
+$btnAuth.onclick = () => showAuthDialog('')
+$authSave.onclick = saveAuthKey
+$authGenerate.onclick = generateAuthKey
+$authCopy.onclick = copyAuthResult
+$authClose.onclick = closeAuthDialog
+$authOverlay.onclick = (e) => { if (e.target === $authOverlay) closeAuthDialog() }
+$btnSkills.onclick = openSkills
+$skillsClose.onclick = () => closeOverlay($skillsOverlay)
+$skillSave.onclick = saveSkill
+$skillNew.onclick = clearSkillForm
+$skillsOverlay.onclick = (e) => { if (e.target === $skillsOverlay) closeOverlay($skillsOverlay) }
+
+// ── 启动 ─────────────────────────────────────────────────────────────────────
+if (apiKey.length === 0) showAuthDialog('首次使用请输入 Console 终端打印的 API Key')
+refresh()
+setInterval(refresh, 2000)
+</script>
+</body>
+</html>

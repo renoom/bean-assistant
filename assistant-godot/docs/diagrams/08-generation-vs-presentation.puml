@@ -1,0 +1,67 @@
+@startuml 08-generation-vs-presentation
+' 生成与呈现的职责切分，以及资产目录如何让生成只发生一次
+title 生成 / 呈现 解耦 —— 客户端只认路径
+
+skinparam defaultFontName "Sans Serif"
+skinparam componentStyle rectangle
+skinparam ArrowFontSize 11
+skinparam packageStyle rectangle
+
+package "助手侧（生成）" #FFF8E1 {
+  component "AI 判断需要一张图" as Need
+  component "调用它自己的生图能力\n（生图工具 / MCP / 本地脚本 / 手工素材）" as Gen
+  component "图片落到磁盘\n~/.assistant/vn/assets/xxx.png" as Disk
+  Need -> Gen
+  Gen -> Disk
+  note bottom of Gen
+    客户端**完全不参与**这一步。
+    换模型、换服务、改成本地 SD ——
+    客户端零改动。
+  end note
+}
+
+package "客户端侧（呈现）" #E8F4FF {
+  component "vn_set_character / vn_set_scene\nvn_add_prop / vn_remove_prop" as Tools
+  component "PathGuard\n白名单根目录 · 扩展名\n大小 ≤16MB · 尺寸 ≤4096²" as Guard
+  component "ImageLoader\nImage.load_from_file()\n(.svg 走 load_svg_from_string)" as Loader
+  component "Director → VNStage\n摆到位 · 转场" as Apply
+  component "AssetCatalog\n哈希去重 · 登记 · 失效检测" as Cat
+  component "StageStore\nuser://stage/<sessionId>.json" as Store
+
+  Tools -> Guard
+  Guard -> Loader : 通过
+  Loader -> Apply : 纹理
+  Apply -> Cat : 登记
+  Apply -> Store : 防抖写盘
+}
+
+Disk ..> Tools : **只传路径**\n不传图片内容
+
+package "喂回模型（闭环）" #E8F5E9 {
+  component "systemPrompt.context\n每步注入 ~250 token" as Ctx
+  component "· 当前舞台长什么样\n· 已有哪些图可复用\n· 哪些情绪槽还空着\n· 哪些路径失效了" as CtxBody
+  Ctx -> CtxBody
+}
+
+Cat --> Ctx : 目录摘要
+Store --> Ctx : 舞台状态
+Ctx ..> Need : 模型据此决定\n**复用** 还是 **重新生成**
+
+note as N1 #E8F5E9
+  **资产目录是省钱的关键**
+  没有它，模型每次想换场景都会
+  重新生成一遍同样的图。
+  有了它，生成一张图是**一次性成本**。
+end note
+Cat . N1
+
+note as N2 #FFCDD2
+  **失败一律不半残上屏**
+  文件不存在 / 解码失败 / 超限
+  → 工具返回失败 + 原因
+  → **舞台保持原样**
+  → 模型据此重新生成或改用已有图
+end note
+Guard . N2
+
+@enduml

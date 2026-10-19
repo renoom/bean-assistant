@@ -1,0 +1,93 @@
+@startuml 05-seq-stage-tool
+' 跨进程工具调用的管道：callId、待答表、立即回执、阻塞式反问
+title 时序 ②：跨进程工具调用 —— dsh 工具怎么落到 Godot 并回执
+
+skinparam defaultFontName "Sans Serif"
+skinparam ParticipantPadding 8
+skinparam BoxPadding 10
+
+participant "LLM" as LLM
+box "assistant 进程 / vn-bridge" #FFF8E1
+  participant "dsh Agent" as AG
+  participant "Toolset\n(ctx.tools)" as ST
+  participant "PendingCalls\n(callId → Promise)" as CB
+end box
+box "Godot 客户端" #E8F4FF
+  participant "ToolGateway" as TG
+  participant "PathGuard" as PG
+  participant "Director" as DIR
+  participant "ChoicePanel" as CP
+end box
+actor 用户 as U
+
+== 握手：工具随连接注册 ==
+TG -> CB : hello { tools:[…], catalog 摘要, 白名单根目录 }
+CB -> ST : ctx.tools.register(×5)
+note right of ST
+  返回 disposer，绑定连接生命周期。
+  dsh 契约：**同名工具重复注册会抛异常**，
+  重注册前必须先 dispose。
+end note
+
+== 情形 A：换背景（非阻塞，立即回执）==
+LLM -> AG : tool_call vn_set_scene\n{ image_path:"~/.assistant/vn/rain.png",\n  transition:"crossfade", duration_ms:600 }
+AG -> ST : execute(args, exec)
+ST -> CB : 生成 callId，投递 WS
+CB -> CB : 挂起 Promise 进待答表\n（超时 5s，并监听 exec.signal）
+CB -> TG : { type:"stage_invoke", callId, name, args }
+TG -> PG : 校验路径
+PG --> TG : ok
+TG -> DIR : submit(StageCommand)
+DIR -> DIR : 交叉淡入（600ms Tween）
+DIR --> TG : { applied:true }
+TG -> CB : { type:"stage_result", callId, ok:true }
+CB -> ST : resolve
+ST --> AG : tool/result
+note right of ST
+  **入队即回执，不等动画放完**
+  （除非 await_complete=true）——
+  否则模型每改一次画面都要多等一秒。
+end note
+AG -> LLM : 带着结果继续生成台词
+
+== 情形 B：路径不合法（优雅失败）==
+LLM -> AG : vn_add_prop { image_path:"/etc/passwd", slot:"left" }
+AG -> ST : execute
+ST -> CB : stage_invoke
+CB -> TG : WS 帧
+TG -> PG : 校验
+PG --> TG : **拒绝**：不在白名单根目录内
+TG -> CB : { ok:false, reason:"path outside allowed roots" }
+ST --> AG : tool/result { ok:false, reason }
+note right of PG #FFCDD2
+  舞台**完全没动**。
+  拒绝原因回到模型上下文里，
+  它下次会把图生成到白名单目录下。
+end note
+
+== 情形 C：反问用户（阻塞式工具）==
+LLM -> AG : tool_call vn_ask\n{ question:"要我直接改还是先给你看 diff？",\n  options:["直接改","先看 diff","算了"] }
+AG -> ST : execute
+ST -> CB : stage_invoke (await_user=true, 超时 120s)
+CB -> TG : WS 帧
+TG -> CP : 弹出选项气泡
+CP --> U : 三个可点选项
+U -> CP : 点「先看 diff」
+CP -> TG : selected(index:1)
+TG -> CB : { ok:true, choice:"先看 diff", index:1 }
+ST --> AG : tool/result
+AG -> LLM : 继续
+note over CP
+  三种收场：
+  · 点选项 → 返回选项
+  · 无视选项直接打字 → { choice:null, reason:"user_typed" }
+  · 超时 → { choice:null, reason:"timeout" }
+  后两种让模型知道该改走纯对话，而不是干等。
+end note
+
+note over ST, CB
+  **阻塞工具必须监听 exec.signal**（dsh 唯一的取消通道），
+  否则用户按 Esc 时 agent.cancel() 取消不掉这次调用。
+end note
+
+@enduml

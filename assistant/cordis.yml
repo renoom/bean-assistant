@@ -1,0 +1,2 @@
+# 空入口列表。所有插件通过 cordis.patch.yml 和 dsh-base bundle 的补丁层组合。
+[]

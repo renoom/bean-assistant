@@ -1,0 +1,14 @@
+{
+  "kernelRepository": "https://github.com/deepseek-ai/deepseek-harness",
+  "commit": "47f943859bef60e4160492346772ded9b24f765a",
+  "shortCommit": "47f9438",
+  "version": "0.1.0-rc.5",
+  "pinnedAt": "2026-08-13T11:38:46Z",
+  "packageCount": 94,
+  "note": "本地 deepseek-harness 工作区快照（含未提交补丁）。升级内核时请同步更新本文件与 automation/README.md 的升级记录。",
+  "baselines": {
+    "assistantTests": 49,
+    "consoleTests": 13,
+    "typecheck": true
+  }
+}

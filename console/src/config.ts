@@ -125,6 +125,18 @@ export interface WebSearchConfig {
   maxUses?: number
 }
 
+/** 蜂群（助手内 subagent）配置。热字段，运行时由 SwarmManager 读取。 */
+export interface SwarmConfig {
+  /** 递归层级上限（主 agent 为 0）。默认 3，绝对上限 10。 */
+  maxDepth?: number
+  /** 同时存活的直接子代理数量上限。默认 5，绝对上限 20。 */
+  maxMembers?: number
+  /** 共享上下文总字节上限。默认 8192。 */
+  contextMaxBytes?: number
+  /** 共享上下文条目数上限。默认 50。 */
+  contextMaxEntries?: number
+}
+
 /** 助手可配置字段（公共与私有共用同一 schema）。 */
 export interface AssistantConfig {
   /** LLM 供应商路由名（热） */
@@ -148,6 +160,8 @@ export interface AssistantConfig {
   /** 独立媒体能力配置（热；图片生成、语音识别/合成，公共可被私有覆盖） */
   media?: MediaConfig
   webSearch?: WebSearchConfig
+  /** 蜂群配置（热） */
+  swarm?: SwarmConfig
 }
 
 /** 配置补丁：字段值为 null 表示删除该字段（恢复继承 / 清空覆盖）。 */
@@ -173,7 +187,7 @@ export interface ConfigStore {
 
 // ── 冷/热字段元数据 ─────────────────────────────────────────────────────────
 
-export const HOT_FIELDS = ['provider', 'model', 'providers', 'skills', 'media', 'webSearch'] as const
+export const HOT_FIELDS = ['provider', 'model', 'providers', 'skills', 'media', 'webSearch', 'swarm'] as const
 export const COLD_FIELDS = ['persona', 'agentMd', 'maxTokens', 'channels', 'environment'] as const
 export const CONFIG_FIELDS = [...HOT_FIELDS, ...COLD_FIELDS] as const
 
@@ -187,6 +201,7 @@ export const CONFIG_FIELD_EFFECT: Record<ConfigField, ConfigEffect> = {
   skills: 'hot',
   media: 'hot',
   webSearch: 'hot',
+  swarm: 'hot',
   persona: 'cold',
   agentMd: 'cold',
   maxTokens: 'cold',
@@ -294,6 +309,7 @@ function cloneAssistantConfig(config: AssistantConfig): AssistantConfig {
     ...(config.channels ? { channels: [...config.channels] } : {}),
     ...(config.media ? { media: cloneMediaConfig(config.media) } : {}),
     ...(config.webSearch ? { webSearch: { ...config.webSearch } } : {}),
+    ...(config.swarm ? { swarm: { ...config.swarm } } : {}),
   }
 }
 
@@ -618,6 +634,9 @@ export function validateConfigPatch(input: unknown): AssistantConfigPatch {
       case 'webSearch':
         patch.webSearch = validateWebSearch(value)
         break
+      case 'swarm':
+        patch.swarm = validateSwarmConfig(value)
+        break
     }
   }
   return patch
@@ -659,6 +678,45 @@ function validateWebSearch(input: unknown): WebSearchConfig {
         break
       default:
         throw new Error(`unknown webSearch field "${key}"`)
+    }
+  }
+  return out
+}
+
+/** 校验蜂群配置（热字段）。 */
+function validateSwarmConfig(input: unknown): SwarmConfig {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+    throw new Error('config field "swarm" must be an object')
+  }
+  const out: SwarmConfig = {}
+  for (const [key, value] of Object.entries(input)) {
+    switch (key) {
+      case 'maxDepth':
+        if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1 || value > 10) {
+          throw new Error('swarm.maxDepth must be an integer between 1 and 10')
+        }
+        out.maxDepth = value
+        break
+      case 'maxMembers':
+        if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1 || value > 20) {
+          throw new Error('swarm.maxMembers must be an integer between 1 and 20')
+        }
+        out.maxMembers = value
+        break
+      case 'contextMaxBytes':
+        if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 512 || value > 65536) {
+          throw new Error('swarm.contextMaxBytes must be an integer between 512 and 65536')
+        }
+        out.contextMaxBytes = value
+        break
+      case 'contextMaxEntries':
+        if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1 || value > 200) {
+          throw new Error('swarm.contextMaxEntries must be an integer between 1 and 200')
+        }
+        out.contextMaxEntries = value
+        break
+      default:
+        throw new Error(`unknown swarm field "${key}"`)
     }
   }
   return out

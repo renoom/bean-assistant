@@ -242,12 +242,121 @@
       .modal .config-nav button { width: auto; white-space: nowrap; }
       .config-pages { max-height: 50vh; }
     }
+    /* ── v2: app 网格 / 助手弹窗 / 团队页 ─────────────────────────────── */
+    main.v2 { flex: 1; display: block; overflow-y: auto; min-height: 0; }
+    .view { max-width: 1560px; margin: 0 auto; padding: 24px; }
+    .view[hidden] { display: none; }
+    .view-head { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+    .view-title { font-size: 20px; font-weight: 650; letter-spacing: -.02em; }
+    .view-sub { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+    .view-tools { margin-left: auto; display: flex; gap: 8px; }
+    .view-tools button { padding: 8px 13px; border-radius: 9px; border: 1px solid var(--border); background: var(--panel); cursor: pointer; font-size: 13px; }
+    .view-tools button:hover { background: #f2f4f7; }
+    .assistant-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; }
+    .assistant-card {
+      position: relative; display: flex; flex-direction: column; gap: 12px; padding: 18px;
+      border: 1px solid var(--border); border-radius: 16px;
+      background: linear-gradient(180deg, #fff, #fbfcfd); cursor: pointer;
+      transition: transform .16s, box-shadow .16s, border-color .16s;
+      box-shadow: 0 1px 2px rgba(16, 24, 40, .04);
+    }
+    .assistant-card:hover { transform: translateY(-2px); border-color: #cfd8e3; box-shadow: 0 10px 24px rgba(16, 24, 40, .08); }
+    .assistant-card .card-top { display: flex; gap: 10px; align-items: flex-start; }
+    .assistant-avatar {
+      width: 42px; height: 42px; border-radius: 13px; display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 15px; color: #fff; flex-shrink: 0;
+      background: linear-gradient(135deg, #5b5bd6, #8b7cf6);
+    }
+    .assistant-card .name-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-weight: 600; font-size: 15px; }
+    .assistant-card .meta-line { color: var(--muted); font-size: 12px; margin-top: 4px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .mini-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--offline); display: inline-block; }
+    .mini-dot.online { background: var(--online); }
+    .mini-dot.starting { background: var(--starting); animation: pulse 1s infinite; }
+    .team-tag {
+      display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px;
+      border-radius: 999px; background: #eef2ff; color: #4f46e5; font-size: 11px; font-weight: 500;
+    }
+    .team-tag.leader { background: #fff7e6; color: #b45309; }
+    .assistant-card .card-foot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+    .pill { font-size: 11px; color: var(--muted); background: #f4f6f8; border-radius: 999px; padding: 2px 8px; }
+    .assistant-card .card-actions { margin-left: auto; display: flex; gap: 2px; opacity: .55; transition: opacity .15s; }
+    .assistant-card:hover .card-actions { opacity: 1; }
+    .assistant-card .card-actions button { border: none; background: transparent; color: #8a94a6; padding: 4px 6px; border-radius: 7px; cursor: pointer; font-size: 14px; }
+    .assistant-card .card-actions button:hover { background: #f0f2f5; color: #333; }
+
+    /* 助手 WebUI 弹窗（同页面，iframe 常驻） */
+    .assistant-view-overlay .modal.assistant-view {
+      width: min(1500px, 96vw); height: min(920px, 92vh); max-height: 92vh;
+      padding: 0; display: flex; flex-direction: column; overflow: hidden; border-radius: 18px; background: var(--panel);
+    }
+    .assistant-view-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .assistant-view-head .title { font-weight: 600; font-size: 15px; }
+    .assistant-view-head .spacer { flex: 1; }
+    .assistant-view-head button { border: 1px solid var(--border); background: var(--panel); padding: 6px 12px; border-radius: 8px; cursor: pointer; font-size: 12.5px; }
+    #frames { flex: 1; min-height: 0; display: block; }
+    #frames iframe { width: 100%; height: 100%; border: none; display: block; }
+
+    /* 团队页 */
+    .team-layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 16px; align-items: start; }
+    .team-panel { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 12px; }
+    .team-panel-title { font-size: 12px; color: var(--muted); padding: 6px 8px 10px; display: flex; align-items: center; justify-content: space-between; }
+    .team-list { display: flex; flex-direction: column; gap: 4px; }
+    .team-list-item { padding: 10px 12px; border-radius: 10px; cursor: pointer; border: 1px solid transparent; }
+    .team-list-item:hover { background: #f4f6f8; }
+    .team-list-item.active { background: #eef4ff; border-color: #c7d8ff; }
+    .team-list-item .tname { font-weight: 600; font-size: 13.5px; }
+    .team-list-item .tmeta { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+    .team-detail { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+    .team-hero { background: linear-gradient(135deg, #eef2ff, #f7f8ff 60%, #fdfdff); border: 1px solid #e2e8fb; border-radius: 18px; padding: 20px; }
+    .team-hero h2 { font-size: 20px; font-weight: 650; letter-spacing: -.02em; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+    .team-hero .goal { color: var(--muted); font-size: 13px; }
+    .team-hero .hero-actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+    .team-hero .hero-actions button { border: 1px solid #d7def0; background: #fff; padding: 7px 12px; border-radius: 9px; cursor: pointer; font-size: 12.5px; }
+    .team-hero .hero-actions button:hover { background: #f6f8ff; }
+    .member-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+    .member-card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 8px; transition: box-shadow .15s, transform .15s; }
+    .member-card:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(16, 24, 40, .06); }
+    .member-card .mhead { display: flex; align-items: center; gap: 9px; }
+    .member-card .mname { font-weight: 600; font-size: 13.5px; }
+    .member-card .mrole { color: var(--muted); font-size: 11.5px; }
+    .member-card .mactions { display: flex; gap: 4px; flex-wrap: wrap; }
+    .member-card .mactions button { border: 1px solid var(--border); background: #fff; padding: 3px 8px; border-radius: 7px; cursor: pointer; font-size: 11px; color: #4b5565; }
+    .member-card .mactions button:hover { background: #f4f6f8; }
+    .crown { font-size: 13px; }
+    .chat-panel { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; display: flex; flex-direction: column; min-height: 320px; max-height: 480px; }
+    .chat-head { padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .chat-log { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+    .chat-line { display: flex; gap: 10px; font-size: 13px; line-height: 1.55; }
+    .chat-time { color: #9aa3b2; font-size: 11px; min-width: 44px; padding-top: 2px; font-variant-numeric: tabular-nums; }
+    .chat-body { min-width: 0; }
+    .chat-route { font-weight: 600; font-size: 12px; color: #4b5565; }
+    .chat-route .arrow { color: #9aa3b2; margin: 0 4px; font-weight: 400; }
+    .chat-text { color: #2b3442; margin-top: 2px; white-space: pre-wrap; word-break: break-word; }
+    .chat-line.broadcast .chat-text { color: #7c4a03; }
+    .chat-empty { color: var(--muted); font-size: 13px; text-align: center; padding: 40px 0; }
+    .chat-compose { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
+    .chat-compose input { flex: 1; border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; font-size: 13px; outline: none; }
+    .chat-compose input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0, 122, 255, .12); }
+    .chat-compose button { border: none; background: var(--accent); color: #fff; border-radius: 10px; padding: 0 16px; cursor: pointer; font-size: 13px; }
+    .chat-compose button:disabled { background: #c7d2e1; cursor: not-allowed; }
+    .team-empty { padding: 60px 20px; text-align: center; color: var(--muted); font-size: 13.5px; grid-column: 1 / -1; }
+    .view-tabs { display: flex; gap: 4px; margin-right: 8px; }
+    .view-tabs button { border: 1px solid transparent; background: transparent; padding: 8px 14px; border-radius: 9px; font-weight: 500; cursor: pointer; color: var(--muted); }
+    .view-tabs button.active { background: #eef4ff; color: var(--accent); border-color: #d7e4ff; }
+    @media (max-width: 900px) {
+      .team-layout { grid-template-columns: 1fr; }
+      .view { padding: 16px; }
+    }
   </style>
 </head>
 <body>
 
 <header>
   <h1>🤖 AI 助手控制台</h1>
+  <nav class="view-tabs" id="view-tabs">
+    <button type="button" data-view="assistants" class="active">助手</button>
+    <button type="button" data-view="teams">团队</button>
+  </nav>
   <span class="sub">注册中心 · 管理中心 · 配置中心</span>
   <span class="spacer"></span>
   <button id="btn-public">公共配置</button>
@@ -257,16 +366,87 @@
   <button id="btn-create">+ 创建助手</button>
 </header>
 
-<main>
-  <aside>
-    <div class="list-header" id="list-header">助手列表 (0)</div>
-    <div id="assistant-list"></div>
-  </aside>
-  <section>
-    <div class="placeholder" id="placeholder">← 选择一个助手开始对话</div>
-    <div id="frames" class="frames" style="display:none"></div>
+<main class="v2" id="main">
+  <section class="view" id="view-assistants">
+    <div class="view-head">
+      <div>
+        <div class="view-title">助手</div>
+        <div class="view-sub" id="assistant-count">正在加载…</div>
+      </div>
+      <div class="view-tools"><button id="view-create-assistant">+ 创建助手</button></div>
+    </div>
+    <div id="assistant-grid" class="assistant-grid"></div>
+  </section>
+
+  <section class="view" id="view-teams" hidden>
+    <div class="view-head">
+      <div>
+        <div class="view-title">团队</div>
+        <div class="view-sub" id="team-count">正在加载…</div>
+      </div>
+      <div class="view-tools"><button id="btn-team-create">+ 新建团队</button></div>
+    </div>
+    <div class="team-layout">
+      <div class="team-panel">
+        <div class="team-panel-title">团队列表</div>
+        <div id="team-list" class="team-list"></div>
+      </div>
+      <div id="team-detail" class="team-detail"></div>
+    </div>
   </section>
 </main>
+
+<!-- 助手 WebUI 弹窗：复用常驻 iframe，关闭只隐藏不卸载 -->
+<div class="modal-overlay assistant-view-overlay" id="assistant-view-overlay">
+  <div class="modal assistant-view">
+    <div class="assistant-view-head">
+      <span class="mini-dot" id="av-dot"></span>
+      <span class="title" id="av-title">助手</span>
+      <span id="av-team"></span>
+      <span class="spacer"></span>
+      <button id="av-close">关闭</button>
+    </div>
+    <div id="frames"></div>
+  </div>
+</div>
+
+<!-- 新建团队 -->
+<div class="modal-overlay" id="team-create-overlay">
+  <div class="modal narrow">
+    <h2>新建团队</h2>
+    <div class="field"><div class="field-head"><label>团队名称</label></div><input id="team-create-name" type="text" placeholder="例如：萤火镇开发组"></div>
+    <div class="field"><div class="field-head"><label>目标（可选）</label></div><textarea id="team-create-goal" rows="3" placeholder="这个团队要完成什么"></textarea></div>
+    <div class="actions">
+      <button class="btn-secondary" id="team-create-cancel">取消</button>
+      <button class="btn-primary" id="team-create-confirm">创建团队</button>
+    </div>
+  </div>
+</div>
+
+<!-- 添加团队成员 -->
+<div class="modal-overlay" id="team-member-overlay">
+  <div class="modal narrow">
+    <h2>添加团队成员</h2>
+    <div class="field"><div class="field-head"><label>助手</label></div><select id="team-member-select"></select></div>
+    <div class="field"><div class="field-head"><label>角色（可选）</label></div><input id="team-member-role" type="text" placeholder="产品 / 开发 / 测试 / 验收"></div>
+    <div class="actions">
+      <button class="btn-secondary" id="team-member-cancel">取消</button>
+      <button class="btn-primary" id="team-member-confirm">添加成员</button>
+    </div>
+  </div>
+</div>
+
+<!-- 修改成员角色 -->
+<div class="modal-overlay" id="team-role-overlay">
+  <div class="modal narrow">
+    <h2>修改角色</h2>
+    <div class="field"><div class="field-head"><label>角色</label></div><input id="team-role-input" type="text" placeholder="产品 / 开发 / 测试 / 验收"></div>
+    <div class="actions">
+      <button class="btn-secondary" id="team-role-cancel">取消</button>
+      <button class="btn-primary" id="team-role-confirm">保存</button>
+    </div>
+  </div>
+</div>
 
 <!-- 创建助手对话框 -->
 <div class="modal-overlay" id="create-overlay">
@@ -433,6 +613,7 @@ const FIELD_DEFS = [
   { key: 'channels', label: 'Channels（通道）', type: 'channels', effect: 'cold', section: 'capabilities' },
   { key: 'media', label: '图片生成服务', type: 'media', effect: 'hot', section: 'image' },
   { key: 'webSearch', label: '联网搜索服务', type: 'webSearch', effect: 'hot', section: 'search' },
+  { key: 'swarm', label: '蜂群配置', type: 'swarm', effect: 'hot', section: 'swarm' },
   { key: 'environment', label: '环境信息描述（公共，不可覆盖）', type: 'textarea', effect: 'cold', publicOnly: true, section: 'environment' },
 ]
 
@@ -443,6 +624,7 @@ const CONFIG_SECTIONS = [
   { id: 'capabilities', label: '能力与通道', description: '选择助手可用的技能和客户端通信通道。' },
   { id: 'image', label: '生图模型', description: '配置场景和客户端调用的图片生成服务。' },
   { id: 'search', label: '网络搜索', description: '使用 dsh 原生 web_search 搜索网络，使用 web_fetch 读取网页。搜索服务独立于当前聊天模型。' },
+  { id: 'swarm', label: '蜂群', description: '配置这个助手内部的蜂群：递归层级、并发成员上限、共享上下文大小。' },
   { id: 'environment', label: '运行环境', description: '设置所有助手共享的运行环境说明。' },
 ]
 
@@ -477,10 +659,35 @@ const MEDIA_VENDOR_FIELDS = {
 }
 
 // ── DOM ────────────────────────────────────────────────────────────────────
-const $list = document.getElementById('assistant-list')
-const $listHeader = document.getElementById('list-header')
-const $placeholder = document.getElementById('placeholder')
+const $assistantGrid = document.getElementById('assistant-grid')
+const $assistantCount = document.getElementById('assistant-count')
 const $frames = document.getElementById('frames')
+const $assistantViewOverlay = document.getElementById('assistant-view-overlay')
+const $avTitle = document.getElementById('av-title')
+const $avTeam = document.getElementById('av-team')
+const $avDot = document.getElementById('av-dot')
+const $avClose = document.getElementById('av-close')
+const $viewTabs = document.getElementById('view-tabs')
+const $viewAssistants = document.getElementById('view-assistants')
+const $viewTeams = document.getElementById('view-teams')
+const $teamList = document.getElementById('team-list')
+const $teamDetail = document.getElementById('team-detail')
+const $teamCount = document.getElementById('team-count')
+const $btnTeamCreate = document.getElementById('btn-team-create')
+const $teamCreateOverlay = document.getElementById('team-create-overlay')
+const $teamCreateName = document.getElementById('team-create-name')
+const $teamCreateGoal = document.getElementById('team-create-goal')
+const $teamCreateCancel = document.getElementById('team-create-cancel')
+const $teamCreateConfirm = document.getElementById('team-create-confirm')
+const $teamMemberOverlay = document.getElementById('team-member-overlay')
+const $teamMemberSelect = document.getElementById('team-member-select')
+const $teamMemberRole = document.getElementById('team-member-role')
+const $teamMemberCancel = document.getElementById('team-member-cancel')
+const $teamMemberConfirm = document.getElementById('team-member-confirm')
+const $teamRoleOverlay = document.getElementById('team-role-overlay')
+const $teamRoleInput = document.getElementById('team-role-input')
+const $teamRoleCancel = document.getElementById('team-role-cancel')
+const $teamRoleConfirm = document.getElementById('team-role-confirm')
 const $btnCreate = document.getElementById('btn-create')
 const $btnPublic = document.getElementById('btn-public')
 const $btnSkills = document.getElementById('btn-skills')
@@ -582,6 +789,14 @@ let lastAuthPromptAt = 0
 let scheduledTasks = []
 let scheduledTaskEditingId = null
 let scheduledTasksTimer = null
+
+// ── v2 状态 ─────────────────────────────────────────────────────────────────
+let activeView = 'assistants'
+let teams = []
+let selectedTeamId = null
+let teamMessages = []
+let teamPolling = false
+let teamRoleTarget = null
 
 // ── 工具 ────────────────────────────────────────────────────────────────────
 function escapeHtml(value) {
@@ -712,31 +927,72 @@ function channelsLabel(channels) {
   return list.length > 0 ? list.map(c => ['ws', 'vn', 'ai-town'].includes(c) ? 'stage' : ['webui', 'web-ui'].includes(c) ? 'http' : c).join('+') : '无'
 }
 
-// ── 助手列表渲染 ─────────────────────────────────────────────────────────────
+function statusLabel(status) {
+  return status === 'online' ? '在线' : status === 'starting' ? '启动中' : '离线'
+}
+
+function teamTagHtml(team) {
+  if (!team) return ''
+  return `<span class="team-tag ${team.isLeader ? 'leader' : ''}">${team.isLeader ? '👑 ' : ''}${escapeHtml(team.name)} · ${escapeHtml(team.role || '成员')}</span>`
+}
+
+// ── 视图切换 ────────────────────────────────────────────────────────────────
+function switchView(view) {
+  activeView = view === 'teams' ? 'teams' : 'assistants'
+  $viewAssistants.hidden = activeView !== 'assistants'
+  $viewTeams.hidden = activeView !== 'teams'
+  for (const button of $viewTabs.querySelectorAll('button')) {
+    button.classList.toggle('active', button.dataset.view === activeView)
+  }
+  if (activeView === 'teams') {
+    loadTeams()
+    switchToTeamIfNeeded()
+  }
+}
+
+// ── 助手网格 ────────────────────────────────────────────────────────────────
 function render() {
-  $listHeader.textContent = `助手列表 (${assistants.length})`
+  renderAssistantGrid()
+  if (activeView === 'teams') renderTeamDetail()
+}
+
+function renderAssistantGrid() {
+  $assistantCount.textContent = assistants.length === 0
+    ? '暂无助手'
+    : `${assistants.length} 个助手 · ${assistants.filter(a => a.status === 'online').length} 个在线`
 
   if (assistants.length === 0) {
-    $list.innerHTML = '<div class="empty">暂无助手<br>点击右上角「创建助手」启动一个</div>'
+    $assistantGrid.innerHTML = '<div class="team-empty">暂无助手<br>点击右上角「创建助手」启动一个</div>'
     return
   }
 
-  $list.innerHTML = ''
+  $assistantGrid.innerHTML = ''
   for (const a of assistants) {
     const card = document.createElement('div')
-    card.className = 'card' + (a.id === selectedId ? ' active' : '')
+    card.className = 'assistant-card'
     const pendingBadge = a.pendingRestart ? '<span class="pending-badge">待重启</span>' : ''
+    const initial = escapeHtml((a.name || '?').trim().slice(0, 1).toUpperCase())
     card.innerHTML = `
-      <div class="dot ${a.status}"></div>
-      <div class="meta">
-        <div class="name">${escapeHtml(a.name)} ${pendingBadge}</div>
-        <div class="info">${escapeHtml(a.host)}:${a.port} · ${escapeHtml(a.model)} · 通道 ${channelsLabel(a.channels)}</div>
+      <div class="card-top">
+        <div class="assistant-avatar">${initial}</div>
+        <div style="flex:1;min-width:0">
+          <div class="name-line">${escapeHtml(a.name)} ${pendingBadge}</div>
+          <div class="meta-line">
+            <span class="mini-dot ${a.status}"></span>${statusLabel(a.status)}
+            <span>·</span><span>${escapeHtml(a.model || '-')}</span>
+          </div>
+        </div>
+        <div class="card-actions">
+          <button class="cfg" title="配置">${GEAR_SVG}</button>
+          ${a.status === 'online'
+            ? '<button class="stop" title="停止">⏹</button>'
+            : '<button class="start" title="启动">▶</button>'}
+        </div>
       </div>
-      <div class="actions">
-        <button class="cfg" title="配置">${GEAR_SVG}</button>
-        ${a.status === 'online'
-          ? '<button class="stop" title="停止">⏹</button>'
-          : '<button class="start" title="启动">▶</button>'}
+      <div>${teamTagHtml(a.team)}</div>
+      <div class="card-foot">
+        <span class="pill">${escapeHtml(a.host)}:${a.port}</span>
+        <span class="pill">通道 ${escapeHtml(channelsLabel(a.channels))}</span>
       </div>
     `
     if (a.status === 'online') {
@@ -746,17 +1002,15 @@ function render() {
     }
     card.querySelector('.cfg').onclick = (e) => { e.stopPropagation(); selectAssistant(a); openAssistantConfig(a) }
     card.onclick = () => selectAssistant(a)
-    $list.appendChild(card)
+    $assistantGrid.appendChild(card)
   }
 }
 
-// 每个助手一个常驻 iframe: 首次选中才创建, 之后切换只是 display 切换。
+// 每个助手一个常驻 iframe: 首次选中才创建, 之后切换只是显示切换。
 // iframe 永不卸载 → 历史/滚动/SSE 全部保留, 不重载、不断连。
 const frames = new Map()  // assistant.id -> iframe
 
 // 每个助手的上一次状态, 用于检测 offline → online 转换 → 触发 iframe 重载。
-// 背景: 助手 stop 后 iframe 还停在「无法连接」错误页; start 后 iframe 不会被自动刷新,
-// 必须显式重新赋值 src。Cmd+R 整个控制台会清理所有 iframe 重新加载, 等同于全量重载。
 const lastAssistantStatus = new Map()  // assistant.id -> 'online' | 'offline' | 'starting'
 
 function assistantUiUrl(a, cacheBust = false) {
@@ -776,8 +1030,9 @@ function reloadAssistantFrames() {
 function selectAssistant(a) {
   selectedId = a.id
   render()
-  $placeholder.style.display = 'none'
-  $frames.style.display = 'flex'
+  $avTitle.textContent = a.name
+  $avDot.className = 'mini-dot ' + a.status
+  $avTeam.innerHTML = teamTagHtml(a.team)
 
   let frame = frames.get(a.id)
   if (!frame) {
@@ -788,6 +1043,11 @@ function selectAssistant(a) {
   }
   for (const f of frames.values()) f.style.display = 'none'
   frame.style.display = 'block'
+  $assistantViewOverlay.classList.add('show')
+}
+
+function closeAssistantView() {
+  $assistantViewOverlay.classList.remove('show')
 }
 
 async function refresh() {
@@ -795,8 +1055,7 @@ async function refresh() {
     assistants = await api('/api/assistants')
 
     // 检测 offline → online 转换: 重新赋值 src (加 cache buster 强制重载) 取代
-    // iframe 里残留的「无法连接」错误页。跨域 iframe 不能用 contentWindow.location.reload
-    // (同源限制), 只能改 src; 加 ?_= 时间戳避免浏览器缓存复用旧文档。
+    // iframe 里残留的「无法连接」错误页。
     for (const a of assistants) {
       const prev = lastAssistantStatus.get(a.id)
       if (prev === 'offline' && a.status === 'online') {
@@ -808,19 +1067,356 @@ async function refresh() {
       }
       lastAssistantStatus.set(a.id, a.status)
     }
-    // 已从注册表移除的助手: 清理状态记录 (iframe 仍保留, 不影响)
     for (const id of lastAssistantStatus.keys()) {
       if (!assistants.find(a => a.id === id)) lastAssistantStatus.delete(id)
     }
 
-    if (selectedId && !assistants.find(a => a.id === selectedId)) {
-      selectedId = null
-      $frames.style.display = 'none'
-      $placeholder.style.display = 'flex'
+    if (selectedId) {
+      const current = assistants.find(a => a.id === selectedId)
+      if (current) {
+        $avTitle.textContent = current.name
+        $avDot.className = 'mini-dot ' + current.status
+        $avTeam.innerHTML = teamTagHtml(current.team)
+      } else {
+        selectedId = null
+        closeAssistantView()
+      }
     }
-    render()
+    renderAssistantGrid()
   } catch (err) {
     console.error('刷新列表失败:', err)
+  }
+}
+
+// ── 团队页 ──────────────────────────────────────────────────────────────────
+async function loadTeams(options = {}) {
+  try {
+    const data = await api('/api/teams')
+    teams = data.teams || []
+    if (selectedTeamId && !teams.find(team => team.id === selectedTeamId)) selectedTeamId = null
+    if (!selectedTeamId && teams.length > 0) selectedTeamId = teams[0].id
+    renderTeamList()
+    $teamCount.textContent = teams.length === 0
+      ? '暂无团队'
+      : `${teams.length} 个团队 · ${teams.reduce((sum, team) => sum + (team.memberCount || 0), 0)} 个成员`
+    if (selectedTeamId) {
+      if (!options.skipMessages) await loadTeamMessages({ silent: options.silent })
+      else renderTeamDetail({ silent: options.silent })
+    } else {
+      renderTeamDetail()
+    }
+  } catch (err) {
+    console.error('加载团队失败:', err)
+  }
+}
+
+async function loadTeamMessages(options = {}) {
+  if (!selectedTeamId) return
+  try {
+    const data = await api(`/api/teams/${encodeURIComponent(selectedTeamId)}/messages?limit=200`)
+    teamMessages = data.messages || []
+    const index = teams.findIndex(team => team.id === selectedTeamId)
+    if (index >= 0 && data.team) teams[index] = data.team
+    renderTeamDetail({ silent: options.silent })
+    if (!options.silent) scrollChatToBottom()
+  } catch (err) {
+    console.error('加载团队消息失败:', err)
+  }
+}
+
+function renderTeamList() {
+  if (teams.length === 0) {
+    $teamList.innerHTML = '<div class="team-panel-title">团队列表</div><div class="team-empty" style="padding:20px 8px">还没有团队</div>'
+    return
+  }
+  $teamList.innerHTML = ''
+  for (const team of teams) {
+    const item = document.createElement('div')
+    item.className = 'team-list-item' + (team.id === selectedTeamId ? ' active' : '')
+    item.innerHTML = `
+      <div class="tname">${escapeHtml(team.name)}</div>
+      <div class="tmeta">${team.memberCount || 0} 成员 · ${team.leaderName ? 'leader: ' + escapeHtml(team.leaderName) : '未指定 leader'}</div>
+    `
+    item.onclick = () => selectTeam(team.id)
+    $teamList.appendChild(item)
+  }
+}
+
+function switchToTeamIfNeeded() {
+  if (selectedTeamId) { renderTeamDetail(); loadTeamMessages({ silent: true }) }
+  else renderTeamDetail()
+}
+
+function selectTeam(teamId) {
+  selectedTeamId = teamId
+  teamMessages = []
+  renderTeamList()
+  loadTeamMessages({ silent: true })
+}
+
+function currentTeam() {
+  return teams.find(team => team.id === selectedTeamId) ?? null
+}
+
+function renderTeamDetail(options = {}) {
+  const team = currentTeam()
+  if (!team) {
+    $teamDetail.innerHTML = '<div class="team-empty">还没有团队。点击右上角「新建团队」创建一个。</div>'
+    return
+  }
+  const priorInput = document.getElementById('team-chat-input')?.value ?? ''
+  const log = document.getElementById('team-chat-log')
+  const wasAtBottom = !log || log.scrollHeight - log.scrollTop - log.clientHeight < 30
+  const savedScrollTop = log ? log.scrollTop : 0
+
+  // 静默轮询时如果用户正聚焦在团队面板内（尤其是给 leader 发消息的输入框），
+  // 不整块重绘，避免输入框失焦/中文输入法被打断；只增量刷新通讯记录。
+  if (options.silent && $teamDetail.contains(document.activeElement)) {
+    const currentLog = document.getElementById('team-chat-log')
+    if (currentLog) {
+      currentLog.innerHTML = teamChatLinesHtml()
+      currentLog.scrollTop = wasAtBottom ? currentLog.scrollHeight : savedScrollTop
+    }
+    return
+  }
+
+  const members = team.members || []
+  const memberCards = members.map(member => {
+    const initial = escapeHtml((member.name || '?').trim().slice(0, 1).toUpperCase())
+    const isLeader = member.isLeader
+    return `
+      <div class="member-card" data-id="${escapeHtml(member.assistantId)}">
+        <div class="mhead">
+          <div class="assistant-avatar" style="width:34px;height:34px;border-radius:10px;font-size:13px">${initial}</div>
+          <div style="min-width:0">
+            <div class="mname">${isLeader ? '<span class="crown">👑</span> ' : ''}${escapeHtml(member.name)}</div>
+            <div class="mrole">${escapeHtml(member.role || '成员')}</div>
+          </div>
+        </div>
+        <div class="meta-line"><span class="mini-dot ${member.status || 'offline'}"></span>${statusLabel(member.status || 'offline')} · ${escapeHtml(member.model || '-')}</div>
+        ${isLeader ? '' : `<div class="mactions">
+          <button data-action="leader">设为 leader</button>
+          <button data-action="role">改角色</button>
+          <button data-action="remove">移出</button>
+        </div>`}
+      </div>
+    `
+  }).join('')
+
+  const chatLines = teamChatLinesHtml()
+  $teamDetail.innerHTML = `
+    <div class="team-hero">
+      <h2>${escapeHtml(team.name)} <span class="team-tag">${team.memberCount || 0} 成员</span></h2>
+      <div class="goal">${escapeHtml(team.goal || '这个团队还没有填写目标')}</div>
+      <div class="hero-actions">
+        <button id="team-add-member">+ 添加成员</button>
+        <button id="team-delete">删除团队</button>
+      </div>
+    </div>
+    <div class="member-grid">${memberCards || '<div class="team-empty" style="padding:20px 0">还没有成员，点击「添加成员」</div>'}</div>
+    <div class="chat-panel">
+      <div class="chat-head">通讯记录</div>
+      <div class="chat-log" id="team-chat-log">${chatLines}</div>
+      <div class="chat-compose">
+        <input id="team-chat-input" type="text" placeholder="${team.leaderId ? '以控制台身份给 leader 发消息…' : '请先指定 leader'}" ${team.leaderId ? '' : 'disabled'} value="${escapeHtml(priorInput)}">
+        <button id="team-chat-send" ${team.leaderId ? '' : 'disabled'}>发送</button>
+      </div>
+    </div>
+  `
+
+  document.getElementById('team-add-member')?.addEventListener('click', openTeamMemberDialog)
+  document.getElementById('team-delete')?.addEventListener('click', () => deleteTeam(team))
+  document.getElementById('team-chat-send')?.addEventListener('click', sendHumanTeamMessage)
+  document.getElementById('team-chat-input')?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') { event.preventDefault(); sendHumanTeamMessage() }
+  })
+  for (const card of $teamDetail.querySelectorAll('.member-card')) {
+    const id = card.dataset.id
+    card.querySelector('[data-action="leader"]')?.addEventListener('click', () => setTeamLeader(id))
+    card.querySelector('[data-action="role"]')?.addEventListener('click', () => openTeamRoleDialog(id))
+    card.querySelector('[data-action="remove"]')?.addEventListener('click', () => removeTeamMember(id))
+  }
+  if (wasAtBottom) scrollChatToBottom()
+}
+
+function teamChatLinesHtml() {
+  if (teamMessages.length === 0) return '<div class="chat-empty">还没有通讯记录</div>'
+  return teamMessages.map(message => {
+    const time = new Date(message.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+    const from = message.fromKind === 'human' ? '控制台' : (message.fromName || message.fromId)
+    const to = message.kind === 'broadcast' ? '全组 📢' : (message.toName || message.toId || '?')
+    return `
+      <div class="chat-line ${message.kind === 'broadcast' ? 'broadcast' : ''}">
+        <div class="chat-time">${time}</div>
+        <div class="chat-body">
+          <div class="chat-route">${escapeHtml(from)}<span class="arrow">→</span>${escapeHtml(to)}</div>
+          <div class="chat-text">${escapeHtml(message.text)}</div>
+        </div>
+      </div>
+    `
+  }).join('')
+}
+
+function scrollChatToBottom() {
+  const log = document.getElementById('team-chat-log')
+  if (log) log.scrollTop = log.scrollHeight
+}
+
+function openTeamMemberDialog() {
+  const team = currentTeam()
+  if (!team) return
+  const candidates = assistants.filter(assistant => !assistant.team)
+  if (candidates.length === 0) {
+    alert('没有可加入的助手：所有助手都已经属于某个团队，或还没有助手。')
+    return
+  }
+  $teamMemberSelect.innerHTML = candidates
+    .map(assistant => `<option value="${escapeHtml(assistant.sessionId)}">${escapeHtml(assistant.name)} (${escapeHtml(assistant.model || '')})</option>`)
+    .join('')
+  $teamMemberRole.value = ''
+  $teamMemberOverlay.classList.add('show')
+  setTimeout(() => $teamMemberSelect.focus(), 0)
+}
+
+async function confirmAddTeamMember() {
+  const team = currentTeam()
+  if (!team) return
+  const assistantId = $teamMemberSelect.value
+  const role = $teamMemberRole.value.trim()
+  $teamMemberConfirm.disabled = true
+  try {
+    await api(`/api/teams/${encodeURIComponent(team.id)}/members`, {
+      method: 'POST',
+      body: JSON.stringify({ assistantId, ...(role ? { role } : {}) }),
+    })
+    closeOverlay($teamMemberOverlay)
+    await loadTeams()
+  } catch (err) {
+    alert('添加失败: ' + err.message)
+  } finally {
+    $teamMemberConfirm.disabled = false
+  }
+}
+
+function openTeamRoleDialog(assistantId) {
+  const team = currentTeam()
+  if (!team) return
+  const member = (team.members || []).find(item => item.assistantId === assistantId)
+  teamRoleTarget = { teamId: team.id, assistantId }
+  $teamRoleInput.value = member?.role || ''
+  $teamRoleOverlay.classList.add('show')
+  setTimeout(() => $teamRoleInput.focus(), 0)
+}
+
+async function confirmTeamRole() {
+  if (!teamRoleTarget) return
+  const role = $teamRoleInput.value.trim()
+  if (!role) return
+  $teamRoleConfirm.disabled = true
+  try {
+    await api(`/api/teams/${encodeURIComponent(teamRoleTarget.teamId)}/members/${encodeURIComponent(teamRoleTarget.assistantId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ role }),
+    })
+    closeOverlay($teamRoleOverlay)
+    teamRoleTarget = null
+    await loadTeams()
+  } catch (err) {
+    alert('保存角色失败: ' + err.message)
+  } finally {
+    $teamRoleConfirm.disabled = false
+  }
+}
+
+async function setTeamLeader(assistantId) {
+  const team = currentTeam()
+  if (!team) return
+  if (!confirm('确定把该成员设为团队 leader 吗？')) return
+  try {
+    await api(`/api/teams/${encodeURIComponent(team.id)}/leader`, {
+      method: 'PATCH',
+      body: JSON.stringify({ leaderId: assistantId }),
+    })
+    await loadTeams()
+  } catch (err) {
+    alert('设置 leader 失败: ' + err.message)
+  }
+}
+
+async function removeTeamMember(assistantId) {
+  const team = currentTeam()
+  if (!team) return
+  if (!confirm('确定把该成员移出团队吗？')) return
+  try {
+    await api(`/api/teams/${encodeURIComponent(team.id)}/members/${encodeURIComponent(assistantId)}`, { method: 'DELETE' })
+    await loadTeams()
+  } catch (err) {
+    alert('移出失败: ' + err.message)
+  }
+}
+
+async function deleteTeam(team) {
+  if (team.members.length > 0) {
+    alert('团队还有成员，先把成员移出后再删除。')
+    return
+  }
+  if (!confirm(`确定删除团队「${team.name}」吗？`)) return
+  try {
+    await api(`/api/teams/${encodeURIComponent(team.id)}`, { method: 'DELETE' })
+    selectedTeamId = null
+    await loadTeams()
+  } catch (err) {
+    alert('删除失败: ' + err.message)
+  }
+}
+
+async function sendHumanTeamMessage() {
+  const team = currentTeam()
+  const input = document.getElementById('team-chat-input')
+  if (!team || !input) return
+  const text = input.value.trim()
+  if (!text) return
+  try {
+    await api(`/api/teams/${encodeURIComponent(team.id)}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    })
+    input.value = ''
+    await loadTeamMessages({ silent: false })
+  } catch (err) {
+    alert('发送失败: ' + err.message)
+  }
+}
+
+async function createTeam() {
+  const name = $teamCreateName.value.trim()
+  if (!name) { $teamCreateName.focus(); return }
+  const goal = $teamCreateGoal.value.trim()
+  $teamCreateConfirm.disabled = true
+  try {
+    const team = await api('/api/teams', {
+      method: 'POST',
+      body: JSON.stringify({ name, ...(goal ? { goal } : {}) }),
+    })
+    closeOverlay($teamCreateOverlay)
+    $teamCreateName.value = ''
+    $teamCreateGoal.value = ''
+    selectedTeamId = team.id
+    await loadTeams()
+  } catch (err) {
+    alert('创建团队失败: ' + err.message)
+  } finally {
+    $teamCreateConfirm.disabled = false
+  }
+}
+
+async function pollTeams() {
+  if (activeView !== 'teams' || !selectedTeamId || teamPolling) return
+  teamPolling = true
+  try {
+    await loadTeams({ silent: true })
+  } finally {
+    teamPolling = false
   }
 }
 
@@ -902,6 +1498,51 @@ function fillModelSelect(container) {
     select.appendChild(opt)
   }
   select.value = models.some(m => m.id === previous) ? previous : models[0].id
+}
+
+function renderSwarmEditor(field, swarm, editable) {
+  const box = document.createElement('div')
+  box.dataset.swarm = 'true'
+  box.style.display = 'grid'
+  box.style.gridTemplateColumns = 'repeat(2, minmax(0, 1fr))'
+  box.style.gap = '10px'
+  const defs = [
+    { key: 'maxDepth', label: '递归层级上限', placeholder: '默认 3（1-10）' },
+    { key: 'maxMembers', label: '并发成员上限', placeholder: '默认 5（1-20）' },
+    { key: 'contextMaxBytes', label: '共享上下文字节上限', placeholder: '默认 8192' },
+    { key: 'contextMaxEntries', label: '共享上下文条目上限', placeholder: '默认 50' },
+  ]
+  for (const def of defs) {
+    const wrap = document.createElement('label')
+    wrap.style.display = 'flex'
+    wrap.style.flexDirection = 'column'
+    wrap.style.gap = '4px'
+    wrap.style.fontSize = '12px'
+    wrap.style.color = 'var(--muted)'
+    wrap.textContent = def.label
+    const input = document.createElement('input')
+    input.type = 'number'
+    input.min = '1'
+    input.placeholder = def.placeholder
+    input.dataset.swarmKey = def.key
+    input.value = swarm[def.key] ?? ''
+    input.disabled = !editable
+    input.addEventListener('input', () => onFieldEdited(field.closest('#cfg-fields') || field, 'swarm'))
+    wrap.appendChild(input)
+    box.appendChild(wrap)
+  }
+  field.appendChild(box)
+}
+
+function readSwarmEditor(container) {
+  const box = container.querySelector('[data-swarm="true"]')
+  const swarm = {}
+  if (!box) return swarm
+  for (const input of box.querySelectorAll('input[data-swarm-key]')) {
+    const value = Number(input.value)
+    if (input.value.trim() !== '' && Number.isInteger(value) && value > 0) swarm[input.dataset.swarmKey] = value
+  }
+  return swarm
 }
 
 function renderConfigFields(container, values, opts = {}) {
@@ -1004,6 +1645,8 @@ function renderConfigFields(container, values, opts = {}) {
       renderMediaEditor(field, values.media || {}, editable)
     } else if (def.type === 'webSearch') {
       renderWebSearchEditor(field, values.webSearch || {}, editable)
+    } else if (def.type === 'swarm') {
+      renderSwarmEditor(field, values.swarm || {}, editable)
     } else if (def.type === 'textarea') {
       const input = document.createElement('textarea')
       input.rows = def.key === 'agentMd' ? 4 : 3
@@ -2010,6 +2653,10 @@ async function saveAssistantConfig(patch) {
           patch.webSearch = readWebSearchEditor($cfgFields)
           continue
         }
+        if (key === 'swarm') {
+          patch.swarm = readSwarmEditor($cfgFields)
+          continue
+        }
         const input = $cfgFields.querySelector(`.field[data-key="${key}"] input, .field[data-key="${key}"] textarea`)
         if (!input) continue
         if (key === 'maxTokens') {
@@ -2482,9 +3129,32 @@ function closeOverlay(overlay) { overlay.classList.remove('show') }
 
 // ── 事件绑定 ─────────────────────────────────────────────────────────────────
 $btnCreate.onclick = () => { $createOverlay.classList.add('show'); $dlgName.focus() }
+const $viewCreateAssistant = document.getElementById('view-create-assistant')
+if ($viewCreateAssistant) $viewCreateAssistant.onclick = () => { $createOverlay.classList.add('show'); $dlgName.focus() }
 $dlgCancel.onclick = () => closeOverlay($createOverlay)
 $dlgConfirm.onclick = createAssistant
 $createOverlay.onclick = (e) => { if (e.target === $createOverlay) closeOverlay($createOverlay) }
+
+$viewTabs.addEventListener('click', (event) => {
+  const button = event.target.closest('button[data-view]')
+  if (button) switchView(button.dataset.view)
+})
+$avClose.onclick = closeAssistantView
+$assistantViewOverlay.onclick = (event) => { if (event.target === $assistantViewOverlay) closeAssistantView() }
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && $assistantViewOverlay.classList.contains('show')) closeAssistantView()
+})
+
+$btnTeamCreate.onclick = () => { $teamCreateOverlay.classList.add('show'); $teamCreateName.focus() }
+$teamCreateCancel.onclick = () => closeOverlay($teamCreateOverlay)
+$teamCreateConfirm.onclick = createTeam
+$teamCreateOverlay.onclick = (event) => { if (event.target === $teamCreateOverlay) closeOverlay($teamCreateOverlay) }
+$teamMemberCancel.onclick = () => closeOverlay($teamMemberOverlay)
+$teamMemberConfirm.onclick = confirmAddTeamMember
+$teamMemberOverlay.onclick = (event) => { if (event.target === $teamMemberOverlay) closeOverlay($teamMemberOverlay) }
+$teamRoleCancel.onclick = () => { teamRoleTarget = null; closeOverlay($teamRoleOverlay) }
+$teamRoleConfirm.onclick = confirmTeamRole
+$teamRoleOverlay.onclick = (event) => { if (event.target === $teamRoleOverlay) { teamRoleTarget = null; closeOverlay($teamRoleOverlay) } }
 
 $btnPublic.onclick = openPublicConfig
 $publicClose.onclick = () => closeOverlay($publicOverlay)
@@ -2531,6 +3201,8 @@ $skillsOverlay.onclick = (e) => { if (e.target === $skillsOverlay) closeOverlay(
 if (apiKey.length === 0) showAuthDialog('首次使用请输入 Console 终端打印的 API Key')
 refresh()
 setInterval(refresh, 2000)
+loadTeams()
+setInterval(pollTeams, 2500)
 </script>
 </body>
 </html>

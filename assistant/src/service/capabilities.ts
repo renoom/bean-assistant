@@ -35,6 +35,7 @@ export interface AssistantCapabilitiesConfig {
   imagesDir?: string
   getRuntimeModel?: () => { provider?: string; model?: string } | undefined
   getObservability?: () => unknown
+  getContext?: (nodeId?: string) => unknown
   dshApi?: DshApi
   onConfigPush?: (raw: unknown) => Promise<void>
   getChannelEndpoints?: () => readonly ChannelEndpoint[]
@@ -118,6 +119,10 @@ export class AssistantCapabilities {
   }
 
   observability(): unknown { return this.config.getObservability?.() ?? {} }
+
+  context(): unknown { return this.config.getContext?.() ?? {} }
+
+  contextNode(id: string): unknown { return id.length > 0 ? (this.config.getContext?.(id) ?? null) : null }
 
   async scheduledWake(input: unknown): Promise<{ accepted: true; duplicate: boolean }> {
     if (!this.config.onScheduledWake) throw new Error('scheduled wake receiver unavailable')

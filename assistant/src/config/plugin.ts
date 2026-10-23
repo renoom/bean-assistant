@@ -16,7 +16,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { AssistantService } from '../plugin.js'
 import { fetchResolvedConfig, normalizeEnvelope, type ResolvedConfigEnvelope } from './fetch.js'
-import type { MediaConfig } from './types.js'
+import type { MediaConfig, SwarmConfig } from './types.js'
 import { createProviderApplier } from './apply/providers.js'
 import { createModelApplier } from './apply/model.js'
 import { createSkillApplier } from './apply/skills.js'
@@ -49,6 +49,7 @@ export function apply(ctx: Context, config: Config = {}): void {
 
     let lastRevision = -1
     let latestMedia: MediaConfig | undefined
+    let latestSwarm: SwarmConfig | undefined
 
     async function ingest(envelope: ResolvedConfigEnvelope): Promise<void> {
       // revision 单调递增：忽略乱序/过期的下发。
@@ -60,6 +61,7 @@ export function apply(ctx: Context, config: Config = {}): void {
       await providerApplier.apply(next.providers, next.webSearch)
       await skillApplier.apply(next.skills)
       latestMedia = next.media
+      latestSwarm = next.swarm
     }
 
     // 暴露给 assistant HTTP 服务：/api/status 读热切换后的 model/provider，
@@ -67,6 +69,7 @@ export function apply(ctx: Context, config: Config = {}): void {
     interface AssistantConfigService {
       currentModel(): { provider?: string; model?: string } | undefined
       media(): MediaConfig | undefined
+      swarm(): SwarmConfig | undefined
       ingest(raw: unknown): Promise<void>
     }
     ctx.provide('assistantConfig', {
@@ -76,6 +79,9 @@ export function apply(ctx: Context, config: Config = {}): void {
       },
       media() {
         return latestMedia
+      },
+      swarm() {
+        return latestSwarm
       },
       async ingest(raw: unknown): Promise<void> {
         const envelope = normalizeEnvelope(raw)

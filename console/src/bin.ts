@@ -25,6 +25,7 @@ import { KnowledgeCenter } from './knowledge/index.ts'
 import { KnowledgeStore } from './knowledge/store.ts'
 import { ApiKeyAuth, maskApiKey } from './auth.ts'
 import { createConsoleServer } from './server.ts'
+import { TeamCenter } from './teams.ts'
 
 // ── 路径 ────────────────────────────────────────────────────────────────────
 
@@ -36,6 +37,8 @@ const CONFIG_FILE = resolve(CONSOLE_DATA_DIR, 'config.json')
 const KNOWLEDGE_DIR = resolve(CONSOLE_DATA_DIR, 'knowledge')
 const API_KEY_FILE = resolve(CONSOLE_DATA_DIR, 'api-key.json')
 const SCHEDULER_FILE = resolve(CONSOLE_DATA_DIR, 'scheduler.sqlite')
+const TEAMS_FILE = resolve(CONSOLE_DATA_DIR, 'teams.json')
+const TEAM_MESSAGES_FILE = resolve(CONSOLE_DATA_DIR, 'teams', 'messages.jsonl')
 
 // ── CLI 参数 ────────────────────────────────────────────────────────────────
 
@@ -85,6 +88,8 @@ async function main(): Promise<void> {
   // 首次启动时落盘一份缺省公共配置，保证 data/config.json 存在
   await configCenter.save()
   const knowledgeCenter = new KnowledgeCenter(new KnowledgeStore(KNOWLEDGE_DIR))
+  const teamCenter = new TeamCenter({ teamsPath: TEAMS_FILE, messagesPath: TEAM_MESSAGES_FILE })
+  await teamCenter.load()
 
   // 鉴权：平台 API Key。首次启动自动生成并打印一次；之后只打印掩码。
   const { auth: apiKeyAuth, created: apiKeyCreated } = await ApiKeyAuth.load(API_KEY_FILE)
@@ -125,12 +130,14 @@ async function main(): Promise<void> {
     apiKeyAuth,
     { ...cliArgs, schedulerPath: SCHEDULER_FILE },
     onMutate,
+    teamCenter,
   )
 
   console.log(`[console] ${cliArgs.name} 已启动: http://${cliArgs.host}:${cliArgs.port}`)
   console.log(`[console] 数据文件: ${DATA_FILE}`)
   console.log(`[console] 配置文件: ${CONFIG_FILE}`)
   console.log(`[console] 调度数据库: ${SCHEDULER_FILE}`)
+  console.log(`[console] 团队文件: ${TEAMS_FILE}`)
   console.log(`[console] 打开浏览器访问 ↑ 进入管理界面`)
 
   // 3. 优雅关闭
@@ -142,6 +149,7 @@ async function main(): Promise<void> {
     await dispose()
     await saveAssistants(registry.list())
     await configCenter.save()
+    await teamCenter.save()
     process.exit(0)
   }
   process.on('SIGTERM', shutdown)

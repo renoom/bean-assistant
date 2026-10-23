@@ -44,6 +44,9 @@ export function convertSessionEvent(event: SessionEvent): SSEFrame | null {
       if (source.kind === 'stage-event' || source.kind === 'event') {
         return { type: 'scene_event', data: { text, source, turn: data.turn } }
       }
+      if (source.kind === 'team-message') {
+        return { type: 'team_message', data: { text, source, turn: data.turn } }
+      }
       // Session uses UserMessage as its transport container.  These two sources
       // are produced by the scheduler, so clients must not present them as a
       // person speaking merely because the underlying event is user/message.

@@ -62,3 +62,30 @@ Godot 连接后先发送 `hello`，服务端回复 `hello_ack`。客户端发送
 | 双向 | chat / chat_result | Stage 客户端聊天及结果 |
 
 只有 Registry 当前激活项接收事件并投影到 Agent 上下文。网关 `/a/:id/ws` 映射到助手 `/ws`。新配置使用 `channels: ["http", "stage"]`；旧值映射到对应新 Channel。
+
+## 团队内部 API（Console，loopback）
+
+供助手进程调用；本机直连免平台 Key，远程需 Key。身份统一使用助手的稳定 `sessionId`。
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/team/roster?sessionId=` | 团队、成员、角色、自己的身份 |
+| POST | `/api/team/messages` | `{sessionId, kind:'direct'|'broadcast', to?, text, replyTo?}`；立即返回 messageId，不等待回复 |
+| POST | `/api/team/role` | `{sessionId, assistantId, role}`；仅 leader |
+| POST | `/api/team/recruit` | `{sessionId, name, role?, persona?}`；仅 leader，用公共配置 spawn 新助手 |
+| GET | `/api/team/pending?sessionId=` | 拉取离线待投递消息（备用通道） |
+
+Console → 助手投递：`POST /api/team/deliver`（助手管理 API），body `{message}`；助手按 messageId 去重，落成 `source.kind='team-message'` 的用户消息。
+
+## 蜂群 API（助手管理 API）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/swarm` | 限额、成员、计数、共享上下文摘要 |
+| GET | `/api/swarm/context` | 共享上下文条目 + 待审候选 + 用量/上限 |
+| GET | `/api/swarm/relations?id=` | 成员的上游/下游 |
+| GET | `/api/swarm/archive` | 归档成员 |
+| GET | `/api/swarm/member/:id` | 成员 + 最近事件（详情首屏） |
+| GET | `/api/swarm/member/:id/stream` | 成员会话 SSE（详情抽屉） |
+
+模型工具：`swarm_dispatch`（唯一后台创建入口）、`swarm_collect`、`swarm_result`、`swarm_context_list/write/propose`、`swarm_retire`；原 native `subagent`/`subagent_fork`/`workflow`/`ralph` 已禁用。

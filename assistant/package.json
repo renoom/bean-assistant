@@ -8,7 +8,7 @@
     "dev": "tsx --watch src/bin.ts",
     "build": "tsc",
     "start": "node lib/bin.js",
-    "test": "tsx --test src/config/fetch.test.ts src/memory/*.test.ts src/scheduler/*.test.ts src/service/*.test.ts src/permissions.test.ts src/stage/manager.test.ts src/channel/stage-channel.test.ts src/media/codex-sprite-tool.test.ts src/media/image-input.test.ts src/config/apply/web-search.test.ts"
+    "test": "tsx --test src/config/fetch.test.ts src/memory/*.test.ts src/scheduler/*.test.ts src/service/*.test.ts src/permissions.test.ts src/stage/manager.test.ts src/channel/stage-channel.test.ts src/media/codex-sprite-tool.test.ts src/media/image-input.test.ts src/config/apply/web-search.test.ts src/team/events.test.ts src/swarm/shared-context.test.ts"
   },
   "dependencies": {
     "@deepseek-ai/cordis": "workspace:*",

@@ -182,6 +182,15 @@ function normalizeConfig(value: unknown): AssistantConfig {
     config.webSearch = search
   }
 
+  if (isRecord(value.swarm)) {
+    const swarm: NonNullable<AssistantConfig['swarm']> = {}
+    if (typeof value.swarm.maxDepth === 'number' && Number.isSafeInteger(value.swarm.maxDepth)) swarm.maxDepth = value.swarm.maxDepth
+    if (typeof value.swarm.maxMembers === 'number' && Number.isSafeInteger(value.swarm.maxMembers)) swarm.maxMembers = value.swarm.maxMembers
+    if (typeof value.swarm.contextMaxBytes === 'number' && Number.isSafeInteger(value.swarm.contextMaxBytes)) swarm.contextMaxBytes = value.swarm.contextMaxBytes
+    if (typeof value.swarm.contextMaxEntries === 'number' && Number.isSafeInteger(value.swarm.contextMaxEntries)) swarm.contextMaxEntries = value.swarm.contextMaxEntries
+    if (Object.keys(swarm).length > 0) config.swarm = swarm
+  }
+
   return config
 }
 

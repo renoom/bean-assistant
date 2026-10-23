@@ -11,6 +11,20 @@
 - id: session-telemetry-otel
   disabled: true
 
+# 蜂群硬约束：所有 subagent 只能后台创建（swarm_dispatch）。
+# 原生 subagent 工具允许前台等待，workflow/ralph 会同步阻塞主 turn，全部禁用。
+- id: tool-subagent
+  disabled: true
+
+- id: tool-subagent-fork
+  disabled: true
+
+- id: tool-workflow
+  disabled: true
+
+- id: tool-ralph
+  disabled: true
+
 # 原生联网工具：搜索沿用 dsh 的 DeepSeek provider，网页读取使用 HTTP provider。
 - id: tool-web
   config:

@@ -51,6 +51,7 @@ import {
 } from './config.ts'
 import { KnowledgeCenter, type ProposeInput } from './knowledge/index.ts'
 import { TaskScheduler, type UpdateTaskInput } from './scheduler/index.ts'
+import { TeamCenter, type Team, type TeamMember, type TeamMessage } from './teams.ts'
 
 // ── 心跳超时 ──────────────────────────────────────────────────────────────
 // 心跳 15s 一拍; 三拍没回视为离线, 由后台扫描器转 offline (保留条目, restart 可 resume)。
@@ -92,6 +93,7 @@ export async function createConsoleServer(
   auth: ApiKeyAuth,
   config: ConsoleConfig,
   onMutate: () => Promise<void>,
+  teamCenter: TeamCenter = new TeamCenter(),
 ): Promise<ConsoleServer> {
   const localConsoleHost = config.host === '0.0.0.0' || config.host === '::' ? '127.0.0.1' : config.host
   const consoleUrl = `http://${localConsoleHost}:${config.port}`
@@ -103,6 +105,18 @@ export async function createConsoleServer(
   })
   // 由控制台 spawn 的子进程, 按端口索引 (端口唯一)
   const children = new Map<number, ChildProcess>()
+  // spawn 到注册之间存在窗口期；预留端口避免并发 spawn 抢同一端口。
+  const reservedPorts = new Set<number>()
+
+  function nextAssistantPort(): number {
+    const port = allocatePort(new Set([...registry.usedPorts(), ...children.keys(), ...reservedPorts]))
+    reservedPorts.add(port)
+    return port
+  }
+
+  function releaseReservedPort(port: number): void {
+    reservedPorts.delete(port)
+  }
 
   let gateway: ConsoleGateway
   const server = createHttpServer(async (req: IncomingMessage, res: ServerResponse) => {
@@ -161,6 +175,7 @@ export async function createConsoleServer(
     if (path === '/api/config/resolve') return true
     if (path.startsWith('/api/knowledge')) return true
     if (path.startsWith('/api/scheduled-tasks')) return true
+    if (path.startsWith('/api/team/')) return true
     if (path === '/api/skills') return method === 'GET'
     if (path.startsWith('/api/skills/')) return method === 'GET'
     return false
@@ -272,6 +287,59 @@ export async function createConsoleServer(
       if (method === 'DELETE') return deleteScheduledTaskHandler(id, url, res)
     }
 
+    // ── 助手内部团队 API（loopback internal） ──────────────────────────────
+    if (path.startsWith('/api/team/')) {
+      return routeInternalTeamApi(method, path, url, req, res)
+    }
+
+    // ── 助手团队 ──────────────────────────────────────────────────────────
+    if (path === '/api/teams') {
+      if (method === 'GET') {
+        return json(res, 200, {
+          revision: teamCenter.revision,
+          teams: teamCenter.list().map(teamView),
+        })
+      }
+      if (method === 'POST') return createTeamHandler(req, res)
+    }
+
+    const teamMessagesMatch = path.match(/^\/api\/teams\/([^/]+)\/messages$/)
+    if (teamMessagesMatch) {
+      const teamId = decodeURIComponent(teamMessagesMatch[1])
+      if (method === 'GET') return listTeamMessagesHandler(teamId, url, res)
+      if (method === 'POST') return postHumanTeamMessageHandler(teamId, req, res)
+    }
+
+    const teamMembersMatch = path.match(/^\/api\/teams\/([^/]+)\/members$/)
+    if (teamMembersMatch && method === 'POST') {
+      return addTeamMemberHandler(decodeURIComponent(teamMembersMatch[1]), req, res)
+    }
+
+    const teamMemberMatch = path.match(/^\/api\/teams\/([^/]+)\/members\/([^/]+)$/)
+    if (teamMemberMatch) {
+      const teamId = decodeURIComponent(teamMemberMatch[1])
+      const assistantId = decodeURIComponent(teamMemberMatch[2])
+      if (method === 'DELETE') return removeTeamMemberHandler(teamId, assistantId, res)
+      if (method === 'PATCH') return patchTeamMemberHandler(teamId, assistantId, req, res)
+    }
+
+    const teamLeaderMatch = path.match(/^\/api\/teams\/([^/]+)\/leader$/)
+    if (teamLeaderMatch && method === 'PATCH') {
+      return setTeamLeaderHandler(decodeURIComponent(teamLeaderMatch[1]), req, res)
+    }
+
+    const teamMatch = path.match(/^\/api\/teams\/([^/]+)$/)
+    if (teamMatch) {
+      const teamId = decodeURIComponent(teamMatch[1])
+      if (method === 'GET') {
+        const team = teamCenter.get(teamId)
+        if (!team) return json(res, 404, { error: 'team not found' })
+        return json(res, 200, teamView(team))
+      }
+      if (method === 'PATCH') return patchTeamHandler(teamId, req, res)
+      if (method === 'DELETE') return deleteTeamHandler(teamId, res)
+    }
+
     // ── 助手注册中心 ──────────────────────────────────────────────────────
     if (method === 'GET' && path === '/api/assistants') {
       return json(res, 200, assistantList())
@@ -324,6 +392,421 @@ export async function createConsoleServer(
     }
 
     return json(res, 404, { error: 'not found' })
+  }
+
+  // ── 团队中心处理器 ────────────────────────────────────────────────────────
+
+  interface TeamMemberView extends TeamMember {
+    name: string
+    status: string
+    model?: string
+    provider?: string
+    isLeader: boolean
+  }
+
+  type TeamView = Team & {
+    memberCount: number
+    leaderName: string | null
+    members: TeamMemberView[]
+  }
+
+  function teamView(team: Team): TeamView {
+    const members: TeamMemberView[] = team.members.map(member => {
+      const info = registry.findBySessionId(member.assistantId) ?? registry.get(member.assistantId)
+      return {
+        ...member,
+        name: info?.name ?? member.assistantId,
+        status: info?.status ?? 'offline',
+        ...(info?.model !== undefined ? { model: info.model } : {}),
+        ...(info?.provider !== undefined ? { provider: info.provider } : {}),
+        isLeader: team.leaderId === member.assistantId,
+      }
+    })
+    const leader = members.find(member => member.isLeader) ?? null
+    return {
+      ...team,
+      members,
+      memberCount: members.length,
+      leaderName: leader?.name ?? null,
+    }
+  }
+
+  function requireTeamAssistant(assistantId: string): AssistantInfo {
+    const info = findAssistant(assistantId)
+    if (!info) throw new Error('assistant not found')
+    return info
+  }
+
+  function teamBodyId(body: Record<string, any>, key: string): string {
+    const value = body[key]
+    if (typeof value !== 'string' || value.trim().length === 0) throw new Error(`${key} is required`)
+    return value.trim()
+  }
+
+  function teamBodyOptionalId(body: Record<string, any>, key: string): string | undefined {
+    const value = body[key]
+    if (value === undefined) return undefined
+    if (value === null) return undefined
+    if (typeof value !== 'string' || value.trim().length === 0) throw new Error(`${key} must be a non-empty string`)
+    return value.trim()
+  }
+
+  async function createTeamHandler(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const body = await readJson(req)
+    if (!body) return json(res, 400, { error: 'invalid JSON body' })
+    try {
+      const leaderId = teamBodyOptionalId(body, 'leaderId')
+      const leader = leaderId ? requireTeamAssistant(leaderId) : undefined
+      const team = teamCenter.create({
+        name: teamBodyId(body, 'name'),
+        ...(typeof body.goal === 'string' ? { goal: body.goal } : {}),
+        ...(leader ? { leaderId: leader.sessionId } : {}),
+      })
+      await teamCenter.save()
+      return json(res, 201, teamView(team))
+    } catch (err) {
+      return json(res, 400, { error: errorMessage(err) })
+    }
+  }
+
+  async function patchTeamHandler(teamId: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const body = await readJson(req)
+    if (!body) return json(res, 400, { error: 'invalid JSON body' })
+    try {
+      const leaderId = body.leaderId === null ? null : teamBodyOptionalId(body, 'leaderId')
+      const leader = leaderId ? requireTeamAssistant(leaderId) : null
+      const team = teamCenter.update(teamId, {
+        ...(typeof body.name === 'string' ? { name: body.name } : {}),
+        ...(body.goal === null || typeof body.goal === 'string' ? { goal: body.goal } : {}),
+        ...(body.leaderId !== undefined ? { leaderId: leader ? leader.sessionId : null } : {}),
+      })
+      await teamCenter.save()
+      return json(res, 200, teamView(team))
+    } catch (err) {
+      const status = errorMessage(err) === 'team not found' ? 404 : 400
+      return json(res, status, { error: errorMessage(err) })
+    }
+  }
+
+  async function deleteTeamHandler(teamId: string, res: ServerResponse): Promise<void> {
+    try {
+      teamCenter.delete(teamId)
+      await teamCenter.save()
+      return json(res, 200, { ok: true })
+    } catch (err) {
+      const status = errorMessage(err) === 'team not found' ? 404 : 400
+      return json(res, status, { error: errorMessage(err) })
+    }
+  }
+
+  async function addTeamMemberHandler(teamId: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const body = await readJson(req)
+    if (!body) return json(res, 400, { error: 'invalid JSON body' })
+    try {
+      const assistantId = teamBodyId(body, 'assistantId')
+      const info = requireTeamAssistant(assistantId)
+      const member = teamCenter.addMember(teamId, info.sessionId, typeof body.role === 'string' ? body.role : undefined)
+      await teamCenter.save()
+      return json(res, 201, { member, team: teamView(teamCenter.get(teamId)!) })
+    } catch (err) {
+      const status = errorMessage(err) === 'team not found' ? 404 : 400
+      return json(res, status, { error: errorMessage(err) })
+    }
+  }
+
+  async function removeTeamMemberHandler(teamId: string, assistantId: string, res: ServerResponse): Promise<void> {
+    try {
+      teamCenter.removeMember(teamId, assistantId)
+      await teamCenter.save()
+      return json(res, 200, teamView(teamCenter.get(teamId)!))
+    } catch (err) {
+      const status = errorMessage(err) === 'team not found' ? 404 : 400
+      return json(res, status, { error: errorMessage(err) })
+    }
+  }
+
+  async function patchTeamMemberHandler(teamId: string, assistantId: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const body = await readJson(req)
+    if (!body) return json(res, 400, { error: 'invalid JSON body' })
+    try {
+      const role = teamBodyId(body, 'role')
+      teamCenter.setRole(teamId, assistantId, role)
+      await teamCenter.save()
+      return json(res, 200, teamView(teamCenter.get(teamId)!))
+    } catch (err) {
+      const status = errorMessage(err) === 'team not found' ? 404 : 400
+      return json(res, status, { error: errorMessage(err) })
+    }
+  }
+
+  async function setTeamLeaderHandler(teamId: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const body = await readJson(req)
+    if (!body) return json(res, 400, { error: 'invalid JSON body' })
+    try {
+      const leaderId = body.leaderId === null ? null : teamBodyId(body, 'leaderId')
+      const leader = leaderId ? requireTeamAssistant(leaderId) : null
+      teamCenter.setLeader(teamId, leader ? leader.sessionId : null)
+      await teamCenter.save()
+      return json(res, 200, teamView(teamCenter.get(teamId)!))
+    } catch (err) {
+      const status = errorMessage(err) === 'team not found' ? 404 : 400
+      return json(res, status, { error: errorMessage(err) })
+    }
+  }
+
+  function listTeamMessagesHandler(teamId: string, url: URL, res: ServerResponse): void {
+    const team = teamCenter.get(teamId)
+    if (!team) return json(res, 404, { error: 'team not found' })
+    const since = url.searchParams.get('since') ?? undefined
+    const rawLimit = Number(url.searchParams.get('limit') ?? '200')
+    const limit = Number.isInteger(rawLimit) && rawLimit > 0 ? rawLimit : 200
+    return json(res, 200, {
+      team: teamView(team),
+      messages: teamCenter.listMessages(teamId, { ...(since ? { since } : {}), limit }),
+    })
+  }
+
+  async function postHumanTeamMessageHandler(teamId: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const body = await readJson(req)
+    if (!body) return json(res, 400, { error: 'invalid JSON body' })
+    try {
+      const message = teamCenter.appendHumanMessage(teamId, teamBodyId(body, 'text'))
+      const leaderInfo = registry.findBySessionId(message.toId ?? '')
+      if (leaderInfo) void distributeTeamMessage(message, [leaderInfo])
+      return json(res, 201, { message })
+    } catch (err) {
+      const status = errorMessage(err) === 'team not found' ? 404 : 400
+      return json(res, status, { error: errorMessage(err) })
+    }
+  }
+
+  // ── 团队消息投递（Console → 助手） ────────────────────────────────────────
+
+  const pendingTeamMessages = new Map<string, TeamMessage[]>()
+
+  function queueTeamMessageFor(info: AssistantInfo, message: TeamMessage): void {
+    const list = pendingTeamMessages.get(info.sessionId) ?? []
+    if (!list.some(item => item.id === message.id)) list.push(message)
+    pendingTeamMessages.set(info.sessionId, list)
+  }
+
+  async function tryDeliverTeamMessage(info: AssistantInfo, message: TeamMessage): Promise<boolean> {
+    try {
+      const response = await fetch(`http://${info.host}:${info.port}/api/team/deliver`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message }),
+        signal: AbortSignal.timeout(3000),
+      })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      return true
+    } catch (err) {
+      console.warn(`[console] 团队消息投递失败 → ${info.name}: ${errorMessage(err)}`)
+      return false
+    }
+  }
+
+  async function distributeTeamMessage(message: TeamMessage, recipients: AssistantInfo[]): Promise<void> {
+    await Promise.all(recipients.map(async info => {
+      if (info.status === 'online' && await tryDeliverTeamMessage(info, message)) return
+      queueTeamMessageFor(info, message)
+    }))
+  }
+
+  async function flushTeamPending(sessionId: string): Promise<void> {
+    const info = registry.findBySessionId(sessionId)
+    if (!info || info.status !== 'online') return
+    const pending = pendingTeamMessages.get(sessionId)
+    if (!pending || pending.length === 0) return
+    const remaining: TeamMessage[] = []
+    for (const message of pending) {
+      if (!(await tryDeliverTeamMessage(info, message))) remaining.push(message)
+    }
+    if (remaining.length > 0) pendingTeamMessages.set(sessionId, remaining)
+    else pendingTeamMessages.delete(sessionId)
+  }
+
+  // ── 助手内部团队 API ──────────────────────────────────────────────────────
+
+  function teamActor(sessionId: string): { info: AssistantInfo; team: Team; member: TeamMember } {
+    const info = registry.findBySessionId(sessionId)
+    if (!info) throw new Error('assistant not found')
+    const team = teamCenter.teamOf(info.sessionId)
+    if (!team) throw new Error('not in a team')
+    const member = team.members.find(item => item.assistantId === info.sessionId)
+    if (!member) throw new Error('not in a team')
+    return { info, team, member }
+  }
+
+  function teamMemberByRef(team: Team, ref: string): TeamMember | undefined {
+    const direct = team.members.find(member => member.assistantId === ref)
+    if (direct) return direct
+    return team.members.find(member => registry.findBySessionId(member.assistantId)?.name === ref)
+  }
+
+  async function routeInternalTeamApi(
+    method: string,
+    path: string,
+    url: URL,
+    req: IncomingMessage,
+    res: ServerResponse,
+  ): Promise<void> {
+    try {
+      if (method === 'GET' && path === '/api/team/roster') return teamRosterHandler(url, res)
+      if (method === 'GET' && path === '/api/team/pending') return teamPendingHandler(url, res)
+      if (method === 'POST' && path === '/api/team/messages') return await teamSendHandler(req, res)
+      if (method === 'POST' && path === '/api/team/role') return await teamRoleHandler(req, res)
+      if (method === 'POST' && path === '/api/team/recruit') return await teamRecruitHandler(req, res)
+      return json(res, 404, { error: 'not found' })
+    } catch (err) {
+      const message = errorMessage(err)
+      const status = message === 'not in a team' || message === 'assistant not found' ? 404 : 400
+      return json(res, status, { error: message })
+    }
+  }
+
+  function teamRosterHandler(url: URL, res: ServerResponse): void {
+    const sessionId = url.searchParams.get('sessionId') ?? ''
+    try {
+      const actor = teamActor(sessionId)
+      const view = teamView(actor.team)
+      const self = view.members.find(member => member.assistantId === actor.info.sessionId)
+      return json(res, 200, {
+        team: view,
+        self: {
+          sessionId: actor.info.sessionId,
+          name: actor.info.name,
+          role: self?.role ?? actor.member.role,
+          isLeader: actor.team.leaderId === actor.info.sessionId,
+        },
+      })
+    } catch (err) {
+      return json(res, 404, { error: errorMessage(err) })
+    }
+  }
+
+  async function teamSendHandler(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const body = await readJson(req)
+    if (!body) return json(res, 400, { error: 'invalid JSON body' })
+    const sessionId = typeof body.sessionId === 'string' ? body.sessionId : ''
+    const actor = teamActor(sessionId)
+    const text = teamBodyId(body, 'text')
+    const kind = body.kind === 'broadcast' ? 'broadcast' : 'direct'
+    const from = {
+      kind: 'assistant' as const,
+      fromKind: 'assistant' as const,
+      fromId: actor.info.sessionId,
+      fromName: actor.info.name,
+    }
+    const replyTo = typeof body.replyTo === 'string' ? body.replyTo : null
+
+    if (kind === 'broadcast') {
+      const message = teamCenter.appendMessage(actor.team.id, {
+        kind: 'broadcast', fromKind: 'assistant', fromId: from.fromId, fromName: from.fromName,
+        text, replyTo,
+      })
+      const recipients = actor.team.members
+        .filter(member => member.assistantId !== actor.info.sessionId)
+        .flatMap(member => {
+          const info = registry.findBySessionId(member.assistantId)
+          return info ? [info] : []
+        })
+      void distributeTeamMessage(message, recipients)
+      return json(res, 201, {
+        messageId: message.id,
+        recipients: recipients.map(info => info.sessionId),
+      })
+    }
+
+    const rawTo = teamBodyId(body, 'to')
+    if (rawTo === 'human') {
+      if (actor.team.leaderId !== actor.info.sessionId) {
+        return json(res, 403, { error: 'only the team leader may message the human' })
+      }
+      const message = teamCenter.appendMessage(actor.team.id, {
+        kind: 'direct', fromKind: 'assistant', fromId: from.fromId, fromName: from.fromName,
+        toId: 'human', toName: '控制台', text, replyTo,
+      })
+      return json(res, 201, { messageId: message.id, recipients: ['human'] })
+    }
+
+    const target = teamMemberByRef(actor.team, rawTo)
+    if (!target) return json(res, 400, { error: 'recipient is not a member of this team' })
+    const targetInfo = registry.findBySessionId(target.assistantId)
+    if (!targetInfo) return json(res, 400, { error: 'recipient is not available' })
+    const message = teamCenter.appendMessage(actor.team.id, {
+      kind: 'direct', fromKind: 'assistant', fromId: from.fromId, fromName: from.fromName,
+      toId: target.assistantId, toName: targetInfo.name, text, replyTo,
+    })
+    void distributeTeamMessage(message, [targetInfo])
+    return json(res, 201, { messageId: message.id, recipients: [targetInfo.sessionId] })
+  }
+
+  async function teamRoleHandler(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const body = await readJson(req)
+    if (!body) return json(res, 400, { error: 'invalid JSON body' })
+    const actor = teamActor(typeof body.sessionId === 'string' ? body.sessionId : '')
+    if (actor.team.leaderId !== actor.info.sessionId) {
+      return json(res, 403, { error: 'only the team leader may assign roles' })
+    }
+    const targetRef = teamBodyId(body, 'assistantId')
+    const role = teamBodyId(body, 'role')
+    const target = teamMemberByRef(actor.team, targetRef)
+    if (!target) return json(res, 400, { error: 'target is not a member of this team' })
+    teamCenter.setRole(actor.team.id, target.assistantId, role)
+    await teamCenter.save()
+    return json(res, 200, teamView(actor.team))
+  }
+
+  async function teamRecruitHandler(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const body = await readJson(req)
+    if (!body) return json(res, 400, { error: 'invalid JSON body' })
+    const actor = teamActor(typeof body.sessionId === 'string' ? body.sessionId : '')
+    if (actor.team.leaderId !== actor.info.sessionId) {
+      return json(res, 403, { error: 'only the team leader may recruit' })
+    }
+    const name = teamBodyId(body, 'name')
+    const role = typeof body.role === 'string' && body.role.trim() ? body.role.trim() : '成员'
+    const persona = typeof body.persona === 'string' && body.persona.trim() ? body.persona.trim() : undefined
+    const publicCfg = configCenter.publicConfig()
+    const port = nextAssistantPort()
+    const sessionId = `assistant-${randomUUID().slice(0, 8)}`
+    let child: ChildProcess | undefined
+    try {
+      const spawned = spawnAssistant({
+        name,
+        port,
+        host: config.assistantHost ?? '127.0.0.1',
+        model: publicCfg.model ?? 'deepseek-v4-flash',
+        provider: publicCfg.provider ?? 'deepseek-official',
+        consoleUrl,
+        persona: persona ?? publicCfg.persona,
+        sessionId,
+        maxTokens: publicCfg.maxTokens,
+        channels: publicCfg.channels ?? [...AVAILABLE_CHANNELS],
+      })
+      child = spawned.child
+      trackChild(port, spawned.child)
+      if (persona) {
+        configCenter.updateAssistant(sessionId, { persona })
+        await configCenter.save()
+      }
+      teamCenter.addMember(actor.team.id, sessionId, role)
+      await teamCenter.save()
+      console.log(`[console] leader 招募助手: ${name} (port ${port}, session=${sessionId})`)
+      return json(res, 201, { sessionId, name, port, role, status: 'starting', teamId: actor.team.id })
+    } catch (err) {
+      if (child) await stopChild(child)
+      releaseReservedPort(port)
+      return json(res, 400, { error: errorMessage(err) })
+    }
+  }
+
+  function teamPendingHandler(url: URL, res: ServerResponse): void {
+    const sessionId = url.searchParams.get('sessionId') ?? ''
+    const messages = pendingTeamMessages.get(sessionId) ?? []
+    pendingTeamMessages.delete(sessionId)
+    return json(res, 200, { messages })
   }
 
   // ── 配置中心处理器 ────────────────────────────────────────────────────────
@@ -657,7 +1140,9 @@ export async function createConsoleServer(
       channelEndpoints: parseChannelEndpoints(payload.channelEndpoints),
     }, child ? { pid: child.pid, spawnedByConsole: true } : {})
     await onMutate()
+    releaseReservedPort(info.port)
     console.log(`[console] 助手已注册: ${info.name} (${info.host}:${info.port}) session=${info.sessionId}`)
+    void flushTeamPending(info.sessionId)
     return json(res, 201, { id: info.id, registered: true, registeredAt: info.registeredAt })
   }
 
@@ -674,6 +1159,7 @@ export async function createConsoleServer(
   async function heartbeatHandler(id: string, res: ServerResponse): Promise<void> {
     const info = registry.heartbeat(id)
     if (!info) return json(res, 404, { error: 'assistant not found' })
+    void flushTeamPending(info.sessionId)
     return json(res, 200, { ok: true, lastHeartbeat: info.lastHeartbeat })
   }
 
@@ -692,7 +1178,7 @@ export async function createConsoleServer(
     const name = body.name.trim()
     const port = typeof body.port === 'number' && body.port > 0
       ? body.port
-      : allocatePort(registry.usedPorts())
+      : nextAssistantPort()
     const sessionId = `assistant-${randomUUID().slice(0, 8)}`
     const publicCfg = configCenter.publicConfig()
 
@@ -743,6 +1229,7 @@ export async function createConsoleServer(
       return json(res, 201, { name, port, pid, sessionId, status: 'starting' })
     } catch (err) {
       console.error('[console] spawn 失败:', err)
+      releaseReservedPort(port)
       return json(res, 500, { error: 'spawn failed' })
     }
   }
@@ -823,17 +1310,37 @@ export async function createConsoleServer(
     return registry.get(id) ?? registry.findBySessionId(id)
   }
 
-  function withPendingRestart(info: AssistantInfo): AssistantInfo & { pendingRestart: boolean } {
+  interface AssistantTeamTag {
+    id: string
+    name: string
+    role: string
+    isLeader: boolean
+  }
+
+  function assistantTeamTag(info: AssistantInfo): AssistantTeamTag | null {
+    const team = teamCenter.teamOf(info.sessionId)
+    if (!team) return null
+    const member = team.members.find(item => item.assistantId === info.sessionId)
+    return {
+      id: team.id,
+      name: team.name,
+      role: member?.role ?? '成员',
+      isLeader: team.leaderId === info.sessionId,
+    }
+  }
+
+  function withPendingRestart(info: AssistantInfo): AssistantInfo & { pendingRestart: boolean; team: AssistantTeamTag | null } {
     const resolved = configCenter.resolve(info.sessionId)
     return {
       ...info,
       model: resolved.model ?? info.model,
       provider: resolved.provider ?? info.provider,
       pendingRestart: configCenter.isPendingRestart(info.sessionId),
+      team: assistantTeamTag(info),
     }
   }
 
-  function assistantList(): Array<AssistantInfo & { pendingRestart: boolean; gatewayBase: string; gatewayWsPath: string }> {
+  function assistantList(): Array<AssistantInfo & { pendingRestart: boolean; team: AssistantTeamTag | null; gatewayBase: string; gatewayWsPath: string }> {
     return registry.list().map(info => ({
       ...withPendingRestart(info),
       gatewayBase: `/a/${encodeURIComponent(info.sessionId)}`,
@@ -856,6 +1363,7 @@ export async function createConsoleServer(
     children.set(port, child)
     child.once('exit', () => {
       if (children.get(port) === child) children.delete(port)
+      releaseReservedPort(port)
     })
   }
 

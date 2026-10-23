@@ -41,7 +41,10 @@ import { registerDrawImageTool } from './media/draw-image-tool.js'
 import { registerCodexSpriteTool } from './media/codex-sprite-tool.js'
 import type { MediaConfig } from './config/types.js'
 import { registerWithConsole } from './registration.js'
+import { installTeamRuntime } from './team/runtime.js'
+import { installSwarmRuntime } from './swarm/runtime.js'
 import { collectObservability } from './observability.js'
+import { collectContextSnapshot, readContextNode } from './service/context-inspector.js'
 import { enableFullAccess, permissionStatus } from './permissions.js'
 import { registerSchedulerTools } from './scheduler/tools.js'
 import { ScheduledWakeService } from './scheduler/wake.js'
@@ -55,7 +58,7 @@ import { fileURLToPath } from 'node:url'
 // ── 配置 ────────────────────────────────────────────────────────────────────
 
 export const name = 'assistant'
-export const inject = ['agents', 'sessionProjections', 'tokenMeter', 'attachments', 'compaction', 'llm', 'permissionPresets']
+export const inject = ['agents', 'sessionProjections', 'tokenMeter', 'attachments', 'compaction', 'llm', 'permissionPresets', 'tools', 'subagents']
 
 export interface Config {
   port: number
@@ -212,6 +215,12 @@ export function apply(ctx: Context, config: Config): void {
     ctx.effect(() => () => scheduledWake.dispose(), 'assistant.scheduler-receiver')
     let idleCompaction: ReturnType<typeof installIdleCompaction> | undefined
     const memoryStatus = () => ({ idleCompaction: idleCompaction?.snapshot() })
+    const runtimeModel = (): { provider?: string; model?: string } | undefined => {
+      const service = ctx.get('assistantConfig') as
+        | { currentModel(): { provider?: string; model?: string } | undefined }
+        | undefined
+      return service?.currentModel()
+    }
     const capabilities = new AssistantCapabilities(agent, stages, {
       name: cfg.name,
       imagesDir: cfg.dataDir ? resolve(cfg.dataDir, 'images') : undefined,
@@ -220,12 +229,7 @@ export function apply(ctx: Context, config: Config): void {
       getMemoryStatus: memoryStatus,
       getPermissions: () => permissionStatus(ctx, agent),
       onScheduledWake: input => scheduledWake.accept(input),
-      getRuntimeModel: () => {
-        const service = ctx.get('assistantConfig') as
-          | { currentModel(): { provider?: string; model?: string } | undefined }
-          | undefined
-        return service?.currentModel()
-      },
+      getRuntimeModel: runtimeModel,
       onConfigPush: async (raw) => {
         // 延迟解析：ingest 在 agent 就绪后由 assistant-config 插件提供。
         const service = ctx.get('assistantConfig') as
@@ -235,6 +239,9 @@ export function apply(ctx: Context, config: Config): void {
         await service.ingest(raw)
       },
       getObservability: () => ({ ...collectObservability(ctx, agent), memory: memoryStatus() }),
+      getContext: (nodeId?: string) => nodeId === undefined
+        ? collectContextSnapshot(ctx, agent, runtimeModel())
+        : readContextNode(ctx, agent, nodeId),
       dshApi: {
         settingsDescribe: () => {
           const settings = ctx.get('settings') as { describe(options?: unknown): unknown } | undefined
@@ -261,9 +268,32 @@ export function apply(ctx: Context, config: Config): void {
     eventHubRef = events
     const management = new HttpService({ host: cfg.host, port: cfg.port })
     const disposeManagementApi = bindManagementApi(management, capabilities)
+    const teamRuntime = cfg.consoleUrl
+      ? installTeamRuntime({
+          agent,
+          consoleUrl: cfg.consoleUrl,
+          sessionId: String(mainSessionId),
+          http: management,
+        })
+      : undefined
+    const swarmRuntime = await installSwarmRuntime({
+      ctx,
+      agent,
+      dataDir: cfg.dataDir,
+      name: cfg.name,
+      getConfig: () => {
+        const service = ctx.get('assistantConfig') as
+          | { swarm?: () => import('./config/types.js').SwarmConfig | undefined }
+          | undefined
+        return service?.swarm?.()
+      },
+      http: management,
+    })
     if (enabled.has('http')) channels.push(new HttpChannel({ host: cfg.host, port: cfg.httpPort ?? 0 }, capabilities, events))
     if (enabled.has('stage')) channels.push(new StageChannel({ host: cfg.host, port: cfg.stagePort ?? 0 }, capabilities, events, stages))
     serverDispose = async () => {
+      swarmRuntime.dispose()
+      teamRuntime?.dispose()
       for (const channel of [...channels].reverse()) await channel.dispose()
       disposeManagementApi()
       await management.dispose()

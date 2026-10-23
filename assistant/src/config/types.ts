@@ -102,6 +102,14 @@ export interface WebSearchConfig {
   maxUses?: number
 }
 
+/** 蜂群（助手内 subagent）配置。热字段。 */
+export interface SwarmConfig {
+  maxDepth?: number
+  maxMembers?: number
+  contextMaxBytes?: number
+  contextMaxEntries?: number
+}
+
 /** 助手可配置字段（公共与私有共用同一 schema）。 */
 export interface AssistantConfig {
   /** LLM 供应商路由名（热） */
@@ -125,6 +133,8 @@ export interface AssistantConfig {
   /** 独立媒体能力配置（热；图片生成、语音识别/合成，公共可被私有覆盖） */
   media?: MediaConfig
   webSearch?: WebSearchConfig
+  /** 蜂群配置（热） */
+  swarm?: SwarmConfig
 }
 
 /** 控制台技能库条目。 */
@@ -134,7 +144,7 @@ export interface SkillDef {
   content: string
 }
 
-export const HOT_FIELDS = ['provider', 'model', 'providers', 'skills', 'media', 'webSearch'] as const
+export const HOT_FIELDS = ['provider', 'model', 'providers', 'skills', 'media', 'webSearch', 'swarm'] as const
 export const COLD_FIELDS = ['persona', 'agentMd', 'maxTokens'] as const
 export const CONFIG_FIELDS = [...HOT_FIELDS, ...COLD_FIELDS] as const
 
@@ -148,6 +158,7 @@ export const CONFIG_FIELD_EFFECT: Record<ConfigField, ConfigEffect> = {
   skills: 'hot',
   media: 'hot',
   webSearch: 'hot',
+  swarm: 'hot',
   persona: 'cold',
   agentMd: 'cold',
   maxTokens: 'cold',

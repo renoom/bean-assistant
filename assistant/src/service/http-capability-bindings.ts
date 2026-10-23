@@ -41,6 +41,12 @@ export function bindManagementApi(http: HttpService, capabilities: AssistantCapa
         return true
       }
       if (url.pathname === '/api/observability') { json(res, 200, capabilities.observability()); return true }
+      if (url.pathname === '/api/context') { json(res, 200, capabilities.context()); return true }
+      if (url.pathname === '/api/context/node') {
+        const id = url.searchParams.get('id') ?? ''
+        json(res, 200, capabilities.contextNode(id))
+        return true
+      }
       if (url.pathname === '/api/dsh/settings' && capabilities.config.dshApi) { json(res, 200, capabilities.config.dshApi.settingsDescribe()); return true }
       if (url.pathname === '/api/dsh/providers' && capabilities.config.dshApi) { json(res, 200, capabilities.config.dshApi.providers()); return true }
       if (url.pathname === '/api/dsh/models' && capabilities.config.dshApi) {

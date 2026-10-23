@@ -8,7 +8,7 @@
     "dev": "tsx --watch src/bin.ts",
     "build": "tsc --noEmit",
     "start": "tsx src/bin.ts",
-    "test": "tsx --test src/gateway.test.ts src/server.test.ts src/config-search.test.ts src/scheduler.test.ts"
+    "test": "tsx --test src/gateway.test.ts src/server.test.ts src/config-search.test.ts src/scheduler.test.ts src/teams.test.ts"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
